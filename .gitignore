@@ -1,0 +1,18 @@
+# IDE - TI Code Composer Studio
+.ccsproject
+.cproject
+.project
+.settings/
+
+# IDE - VS Code
+.vscode/
+
+# Build output
+Debug/
+
+# Generated files
+README.html
+
+# clangd
+.clangd
+.clangd/
