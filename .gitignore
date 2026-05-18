@@ -16,3 +16,6 @@ README.html
 # clangd
 .clangd
 .clangd/
+
+# Claude Code
+.claude/
