@@ -45,10 +45,14 @@ int main(void)
     Key_Init();
     Servo_Init();
     
+    // Buzzer_Beep(1000);
 
     while (1)
     {
         // test();
+
+        // Buzzer_Beep(1000);
+        // delay_ms(2000);
     }
 }
 
