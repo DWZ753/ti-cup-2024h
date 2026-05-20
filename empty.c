@@ -44,30 +44,25 @@ int main(void)
     Motor_Init();
     Key_Init();
     Servo_Init();
-
-    // Servo_SetAngle(60);
-
     
 
     while (1)
     {
-        // Buzzer_Beep(1000);
-
-        // Motor_Forward(50);
-
-        // delay_ms(2000);
-
-        //让舵机在0-180度之间连续转动
-        for (uint32_t i = 0; i < 180; i++)
-        {
-            Servo_SetAngle(i);
-            delay_ms(10);
-        }
-        for (uint32_t i = 180; i > 0; i--)
-        {
-            Servo_SetAngle(i);
-            delay_ms(10);
-        }
+        // test();
     }
 }
 
+
+void test(void)
+{
+    for (int i = -100; i < 100; i++)
+    {
+        Servo_SetValue(i);
+        delay_ms(20);
+    }
+    for (int i = 100; i > -100; i--)
+    {
+        Servo_SetValue(i);
+        delay_ms(20);
+    }
+}

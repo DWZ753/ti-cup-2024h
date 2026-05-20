@@ -21,7 +21,7 @@ void TB6612_Init(void)
  * @param period_count 输入的PWM周期计数值
  * @return uint32_t 限制后的PWM周期计数值，范围在[0, TB6612_PWM_PERIOD_COUNT]之间
  */
-uint32_t TB6612_PWM_Period_Count_Limit(uint32_t period_count)
+uint32_t TB6612_LimitPWM(uint32_t period_count)
 {
     if (period_count > TB6612_PWM_PERIOD_COUNT)
     {
@@ -47,7 +47,7 @@ uint32_t TB6612_PWM_Period_Count_Limit(uint32_t period_count)
  */
 void TB6612_A_Forward(uint32_t duty)
 {
-    duty = TB6612_PWM_Period_Count_Limit(duty);
+    duty = TB6612_LimitPWM(duty);
 
     DL_GPIO_setPins(TB6612_GPIO_PORT, TB6612_GPIO_AIN1_PIN);
     DL_GPIO_clearPins(TB6612_GPIO_PORT, TB6612_GPIO_AIN2_PIN);
@@ -66,7 +66,7 @@ void TB6612_A_Forward(uint32_t duty)
  */
 void TB6612_A_Backward(uint32_t duty)
 { 
-    duty = TB6612_PWM_Period_Count_Limit(duty);
+    duty = TB6612_LimitPWM(duty);
 
     DL_GPIO_clearPins(TB6612_GPIO_PORT, TB6612_GPIO_AIN1_PIN);
     DL_GPIO_setPins(TB6612_GPIO_PORT, TB6612_GPIO_AIN2_PIN);
@@ -107,7 +107,7 @@ void TB6612_A_Stop(void)
  */
 void TB6612_B_Forward(uint32_t duty)
 { 
-    duty = TB6612_PWM_Period_Count_Limit(duty);
+    duty = TB6612_LimitPWM(duty);
 
     DL_GPIO_setPins(TB6612_GPIO_PORT, TB6612_GPIO_BIN1_PIN);
     DL_GPIO_clearPins(TB6612_GPIO_PORT, TB6612_GPIO_BIN2_PIN);
@@ -126,7 +126,7 @@ void TB6612_B_Forward(uint32_t duty)
  */
 void TB6612_B_Backward(uint32_t duty)
 { 
-    duty = TB6612_PWM_Period_Count_Limit(duty);
+    duty = TB6612_LimitPWM(duty);
 
     DL_GPIO_clearPins(TB6612_GPIO_PORT, TB6612_GPIO_BIN1_PIN);
     DL_GPIO_setPins(TB6612_GPIO_PORT, TB6612_GPIO_BIN2_PIN);

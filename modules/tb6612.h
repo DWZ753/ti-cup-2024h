@@ -15,7 +15,7 @@
 #define TB6612_PWM_PERIOD_COUNT							10000
 
 void TB6612_Init(void);
-uint32_t TB6612_PWM_Period_Count_Limit(uint32_t period_count);
+uint32_t TB6612_LimitPWM(uint32_t period_count);
 
 void TB6612_A_Forward(uint32_t duty);
 void TB6612_A_Backward(uint32_t duty);

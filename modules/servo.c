@@ -1,71 +1,59 @@
 #include "servo.h"
 
 /**
- * @brief 初始化舵机模块
- *
- * 设置舵机到中位(90°)，然后启动PWM定时器计数器。
- * 应在SYSCFG_DL_init()之后调用。
- *
- * @note 先设置中位再启动定时器，避免上电瞬间舵机乱摆
+ * @brief 舵机初始化函数
+ * 
+ * 启动PWM定时器计数器并将舵机设置到中心位置。
+ * @return 无
+ * @note 此函数应在系统初始化阶段调用，确保舵机PWM信号正常输出。
  */
 void Servo_Init(void)
 {
-    DL_Timer_setCaptureCompareValue(SERVO_PWM_INST,
-        SERVO_US_TO_COUNTS(SERVO_PULSE_CENTER_US),
-        SERVO_PWM_CHANNEL);
     DL_Timer_startCounter(SERVO_PWM_INST);
+    Servo_SetValue(0);
 }
 
 /**
- * @brief 将角度值限制在有效范围内
- *
- * 输入超出[SERVO_ANGLE_MIN, SERVO_ANGLE_MAX]范围的角度值时，
- * 自动钳位到最近的有效边界值。
- *
- * @param angle 输入的角度值(°)
- * @return uint32_t 限制后的角度值
+ * @brief 限制舵机控制值在有效范围内
+ * 
+ * 将输入的舵机控制值限制在 [-100, 100] 的范围内，防止超出舵机的有效控制区间。
+ * 
+ * @param value 需要限制的舵机控制值
+ * @return 限制后的值
  */
-uint32_t Servo_LimitAngle(uint32_t angle)
+int32_t Servo_LimitValue(int32_t value)
 {
-    if (angle > SERVO_ANGLE_MAX)
+    if (value > 100)
     {
-        angle = SERVO_ANGLE_MAX;
+        value = 100;
     }
-    if (angle < SERVO_ANGLE_MIN)
+    if (value < -100)
     {
-        angle = SERVO_ANGLE_MIN;
+        value = -100;
     }
 
-    return angle;
+    return value;
 }
 
 /**
- * @brief 设置舵机角度
- *
- * 将角度线性映射为PWM脉宽并输出至舵机。
- * 映射关系：0°→0.5ms脉宽，90°→1.5ms脉宽（中位），180°→2.5ms脉宽。
- *
- * 阿克曼转向用法：
- *   - 90° = 车轮回正，直行
- *   - < 90° = 左转（推荐60°-90°，即左偏0-30°）
- *   - > 90° = 右转（推荐90°-120°，即右偏0-30°）
- *
- * @param angle 目标角度(°)，范围[0, 180]，超出部分自动钳位
+ * @brief 设置舵机输出值
+ * 
+ * 输入值会被限制在有效范围内，然后线性映射到舵机的脉冲宽度范围。
+ * @param value 舵机控制值，范围为-100到100的整数
+ * 
+ *              - 正值表示正向偏转
+ * 
+ *              - 负值表示反向偏转
+ * 
+ *              - 0表示中位
+ * @return 无
  */
-void Servo_SetAngle(uint32_t angle)
+void Servo_SetValue(int32_t value)
 {
-    uint32_t pulse_us;
-    uint32_t pulse;
+    uint32_t duty;
 
-    angle = Servo_LimitAngle(angle);
+    duty = SERVO_PULSE_CENTER_US + 
+        (Servo_LimitValue(value) * (SERVO_PULSE_MAX_US - SERVO_PULSE_MIN_US) / 200);
 
-    // 角度 → 微秒脉宽：us = 500 + angle * 2000 / 180
-    pulse_us = SERVO_PULSE_MIN_US
-               + angle * (SERVO_PULSE_MAX_US - SERVO_PULSE_MIN_US)
-                     / SERVO_ANGLE_MAX;
-
-    /* 微秒脉宽 → 定时器计数值 */
-    pulse = SERVO_US_TO_COUNTS(pulse_us);
-
-    DL_Timer_setCaptureCompareValue(SERVO_PWM_INST, pulse, SERVO_PWM_CHANNEL);
+    DL_Timer_setCaptureCompareValue(SERVO_PWM_INST, duty, SERVO_PWM_CHANNEL);
 }
