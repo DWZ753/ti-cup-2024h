@@ -33,6 +33,9 @@
 
 uint8_t state = 0;
 
+
+void test(void);
+
 int main(void)
 {
     SYSCFG_DL_init();
@@ -44,29 +47,31 @@ int main(void)
     Motor_Init();
     Key_Init();
     Servo_Init();
-    
-    // Buzzer_Beep(1000);
+    UART_init();
 
     while (1)
     {
-        // test();
+        test();
 
         // Buzzer_Beep(1000);
         // delay_ms(2000);
+
+        // DL_UART_transmitDataBlocking(PRINT_INST, 'H');
+        // delay_ms(500);
     }
 }
 
 
 void test(void)
 {
-    for (int i = -100; i < 100; i++)
-    {
-        Servo_SetValue(i);
-        delay_ms(20);
-    }
-    for (int i = 100; i > -100; i--)
-    {
-        Servo_SetValue(i);
-        delay_ms(20);
+    // static int n = 0;
+    // Buzzer_Beep(500);
+    // delay_ms(1500);
+    // UART0_printfDMA("test");
+    if (UART0RxDone) {
+        UART0_printfDMA("Received %d bytes: %s\n", UART0RxLen, UART0RxBuf);
+        UART0_startReceive();
     }
 }
+
+
