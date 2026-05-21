@@ -13,8 +13,22 @@
 #define SERVO_PULSE_MAX_US          4000    /* 物理120°对应脉宽(us)，留余量避免机械限位 */
 #define SERVO_PULSE_CENTER_US       3000    /* 物理90°对应脉宽(us)，实测定标值         */
 
+/**
+ * @brief 舵机初始化，启动 PWM 输出并将舵机复位到中心位置
+ */
 void Servo_Init(void);
+
+/**
+ * @brief 将舵机控制值限制在有效范围 [-100, 100] 内
+ * @param value 原始控制值
+ * @return 限制后的值
+ */
 int32_t Servo_LimitValue(int32_t value);
+
+/**
+ * @brief 设置舵机角度
+ * @param value 控制值，范围 -100（最小角度）到 100（最大角度），0 为中心位置
+ */
 void Servo_SetValue(int32_t value);
 
 #endif

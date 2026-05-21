@@ -33,6 +33,8 @@
 
 static UART_Handle *uart_print;
 
+int state = 0;
+
 void test(void);
 
 int main(void)
@@ -46,6 +48,7 @@ int main(void)
     Motor_Init();
     Key_Init();
     Servo_Init();
+    OLED_Init();
 
     /* 注册 UART0（PRINT）实例 */
     UART_Config uart_cfg = {
@@ -68,5 +71,24 @@ int main(void)
 
 void test(void)
 {
-    
+    static uint8_t t = ' ';
+
+    OLED_ShowChinese(0,0,0,16);//中
+    OLED_ShowChinese(18,0,1,16);//景
+    OLED_ShowChinese(36,0,2,16);//园
+    OLED_ShowChinese(54,0,3,16);//电
+    OLED_ShowChinese(72,0,4,16);//子
+    OLED_ShowChinese(90,0,5,16);//科
+    OLED_ShowChinese(108,0,6,16);//技
+    OLED_ShowString(8,2,(uint8_t *)"ZHONGJINGYUAN",16);
+    OLED_ShowString(20,4,(uint8_t *)"2014/05/01",16);
+    OLED_ShowString(0,6,(uint8_t *)"ASCII:",16);  
+    OLED_ShowString(63,6,(uint8_t *)"CODE:",16);
+    OLED_ShowChar(48,6,t,16);
+    t++;
+    if(t>'~')t=' ';
+    OLED_ShowNum(103,6,t,3,16);
+    delay_ms(500);
+    OLED_Clear();
+
 }

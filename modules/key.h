@@ -33,8 +33,23 @@ typedef struct {
 // 外部按键数组声明
 extern Key_t keys[KEY_NUM];
 
+/**
+ * @brief 按键模块初始化
+ * @note 遍历配置数组初始化所有按键状态，注册 PIT 定时器回调用于周期性扫描
+ */
 void Key_Init(void);
+
+/**
+ * @brief 按键扫描与状态机处理
+ * @note 基于有限状态机实现消抖和触发检测，触发后置位 flag 供 Key_GetFlag() 读取
+ */
 void Key_Scan(void);
+
+/**
+ * @brief 获取按键触发标志并自动清除
+ * @param key_index 按键索引（0 ~ KEY_NUM-1）
+ * @return 非 0 表示按键已触发，0 表示未触发或索引无效
+ */
 uint8_t Key_GetFlag(uint8_t key_index);
 
 #endif

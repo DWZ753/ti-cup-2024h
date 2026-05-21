@@ -48,12 +48,61 @@ typedef struct {
 
 /* ========== 通用 API ========== */
 
+/**
+ * @brief 注册并初始化一个 UART 实例
+ * @param config 初始化配置（指定外设、中断号、DMA 通道等）
+ * @return 成功返回句柄指针，失败返回 NULL（重复注册 / 硬件索引无效 / 实例已满）
+ * @note 调用后 NVIC 中断自动使能；DMA 初始化由 SYSCFG_DL_init() 完成
+ */
 UART_Handle* UART_Init(const UART_Config *config);
+
+/**
+ * @brief 阻塞方式发送字符串（逐字节等待）
+ * @param h   UART 句柄指针
+ * @param str 待发送字符串（以 \0 结尾）
+ * @return 已发送的字符数
+ */
 int  UART_SendStr(UART_Handle *h, const char *str);
+
+/**
+ * @brief 阻塞方式格式化输出（printf 风格）
+ * @param h   UART 句柄指针
+ * @param fmt 格式控制字符串
+ * @param ... 可变参数列表
+ * @return 格式化后的字符串长度
+ */
 int  UART_Printf(UART_Handle *h, char *fmt, ...);
+
+/**
+ * @brief DMA 方式发送字符串（非阻塞）
+ * @param h   UART 句柄指针
+ * @param str 待发送字符串
+ * @param len 字符串长度
+ * @note 调用后需等待 h->txDMADone == 1；发送期间会等待上一次 DMA 传输完成
+ */
 void UART_SendStrDMA(UART_Handle *h, const char *str, uint16_t len);
+
+/**
+ * @brief DMA 方式格式化输出（非阻塞）
+ * @param h   UART 句柄指针
+ * @param fmt 格式控制字符串
+ * @param ... 可变参数列表
+ * @note 调用后需等待 h->txDMADone == 1；发送期间会等待上一次 DMA 传输完成
+ */
 void UART_PrintfDMA(UART_Handle *h, char *fmt, ...);
+
+/**
+ * @brief 开始接收数据，重置接收状态
+ * @param h UART 句柄指针
+ * @note 调用后 rxDone 清零、rxPos 归零，ISR 收到数据后自动填充缓冲区
+ */
 void UART_StartReceive(UART_Handle *h);
+
+/**
+ * @brief 通用 UART 中断处理（由各 UARTx_IRQHandler 分发调用）
+ * @param h UART 句柄指针
+ * @note 处理 DMA 发送完成和 RX 接收两种中断
+ */
 void UART_HandleIRQ(UART_Handle *h);
 
 /* ========== ISR 入口（由向量表调用，自动分发到已注册句柄） ========== */

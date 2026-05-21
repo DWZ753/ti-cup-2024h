@@ -3,12 +3,6 @@
  */
 #include "motor.h"
 
-/**
- * @brief 电机初始化函数
- * 
- * 初始化电机模块，将电机设置为停止状态。
- * @return 无
- */
 void Motor_Init(void)
 {
     Motor_Stop();

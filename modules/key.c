@@ -20,19 +20,6 @@ Key_t keys[KEY_NUM];
 static void Key_TickHandler(void);
 
 
-/**
- * @brief 按键模块初始化函数
- * 
- * 该函数完成以下工作：
- * 
- * 1. 遍历所有按键，从配置数组中读取引脚和有效电平信息
- * 
- * 2. 初始化每个按键的状态为空闲状态
- * 
- * 3. 清零消抖计数器和触发标志
- * 
- * 4. 注册PIT定时器Tick回调函数用于按键扫描
- */
 void Key_Init(void)
 {
     // 初始化所有按键的配置
@@ -77,26 +64,6 @@ static uint8_t Key_ReadLogic(uint8_t key_index)
 }
 
 
-/**
- * @brief 按键扫描与状态机处理函数
- * 
- * 该函数实现基于有限状态机的按键扫描逻辑，完成以下工作：
- * 
- * 1. 遍历所有按键，读取其逻辑电平状态（统一转换为1=按下，0=未按下）
- * 
- * 2. 根据当前按键状态执行相应的状态转移：
- * 
- *    - KEY_STATE_IDLE: 检测按键按下动作，通过连续多次检测实现消抖
- * 
- *    - KEY_STATE_PRESSED: 等待按键释放，通过连续多次检测确认释放
- * 
- *    - KEY_STATE_RELEASED: 保持触发标志位，等待主程序读取清除
- * 
- * 3. 使用消抖计数器（KEY_DEBOUNCE_COUNT）过滤机械抖动干扰
- * 
- * 4. 在按键从按下到释放的完整过程结束后，置位flag标志供外部查询
- * @note 按键触发标志需要通过 Key_GetFlag() 函数读取并自动清除
- */
 void Key_Scan(void)
 {
     for (uint8_t i = 0; i < KEY_NUM; i++) {
@@ -152,19 +119,6 @@ void Key_Scan(void)
 }
 
 
-/**
- * @brief 获取按键触发标志并清除状态
- * 
- * 该函数用于查询指定按键是否被触发，如果检测到按键触发事件，
- * 则自动清除标志位并重置按键状态为空闲。
- * 
- * @param key_index 按键索引（范围：0 ~ KEY_NUM-1）
- * @return uint8_t 按键触发标志值
- * 
- * - !0：表示按键已被触发
- * 
- * - 0：表示按键未被触发或索引无效
- */
 uint8_t Key_GetFlag(uint8_t key_index)
 {
     // 边界检测
