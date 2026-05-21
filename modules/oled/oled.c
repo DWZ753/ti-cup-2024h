@@ -4,6 +4,15 @@
 
 #define I2C_TIMEOUT_CNT  (100000)
 
+/**
+ * @brief 禁用 I2C 外设，将 SCL/SDA 引脚临时切换为 GPIO 模式
+ *
+ * 该函数用于解锁 I2C 总线（当 SDA 被从设备意外拉低时），
+ * 通过复位 I2C 外设并将 SCL 配置为 GPIO 输出、SDA 配置为 GPIO 输入，
+ * 以便通过 GPIO 模拟时钟信号来解除 SDA 锁定。
+ *
+ * @return 始终返回 0
+ */
 static int oled_i2c_disable(void)
 {
     DL_I2C_reset(I2C_OLED_INST);
@@ -16,6 +25,14 @@ static int oled_i2c_disable(void)
     return 0;
 }
 
+/**
+ * @brief 重新启用 I2C 外设，将 SCL/SDA 引脚恢复为外设功能模式
+ *
+ * 该函数与 oled_i2c_disable() 配对使用，在完成 GPIO 位操作后
+ * 恢复 I2C 外设的正常通信功能。
+ *
+ * @return 始终返回 0
+ */
 static int oled_i2c_enable(void)
 {
     DL_I2C_reset(I2C_OLED_INST);
@@ -166,6 +183,15 @@ void OLED_ShowChar(uint8_t x, uint8_t y, uint8_t chr, uint8_t sizey)
     }
 }
 
+/**
+ * @brief 计算 m 的 n 次幂
+ *
+ * 用于 OLED_ShowNum 中提取数字的每一位（十位、百位等）。
+ *
+ * @param m 底数
+ * @param n 指数
+ * @return m 的 n 次幂结果
+ */
 static uint32_t oled_pow(uint8_t m, uint8_t n)
 {
     uint32_t result = 1;
