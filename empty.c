@@ -48,7 +48,22 @@ int main(void)
     Motor_Init();
     Key_Init();
     Servo_Init();
-    OLED_Init();
+
+    /* 注册 I2C0（OLED 用） */
+    I2C_Config i2c_cfg = {
+        .i2c          = I2C_OLED_INST,
+        .sclPort      = GPIO_I2C_OLED_SCL_PORT,
+        .sclPin       = GPIO_I2C_OLED_SCL_PIN,
+        .sclIomux     = GPIO_I2C_OLED_IOMUX_SCL,
+        .sclIomuxFunc = GPIO_I2C_OLED_IOMUX_SCL_FUNC,
+        .sdaPort      = GPIO_I2C_OLED_SDA_PORT,
+        .sdaPin       = GPIO_I2C_OLED_SDA_PIN,
+        .sdaIomux     = GPIO_I2C_OLED_IOMUX_SDA,
+        .sdaIomuxFunc = GPIO_I2C_OLED_IOMUX_SDA_FUNC,
+        .syscfgInit   = SYSCFG_DL_I2C_OLED_init,
+    };
+    I2C_Handle *oled_i2c = I2C_Init(&i2c_cfg);
+    OLED_Init(oled_i2c);
 
     /* 注册 UART0（PRINT）实例 */
     UART_Config uart_cfg = {

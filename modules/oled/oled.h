@@ -2,15 +2,17 @@
 #define __OLED_H
 
 #include "ti_msp_dl_config.h"
+#include "i2c.h"
 
 #define OLED_CMD  0
 #define OLED_DATA 1
 
 /**
  * @brief 初始化 SSD1306 OLED 显示屏
- * @note 配置完成后调用 OLED_Clear() 清屏，调用 OLED_DisplayOn() 开启显示
+ * @param i2c 已注册的 I2C 句柄指针
+ * @note 需先通过 I2C_Init 注册对应 I2C 实例，再传入句柄
  */
-void OLED_Init(void);
+void OLED_Init(I2C_Handle *i2c);
 
 /**
  * @brief 清屏（全黑）
@@ -102,7 +104,7 @@ void OLED_DrawBMP(uint8_t x, uint8_t y, uint8_t sizex, uint8_t sizey, uint8_t BM
 
 /**
  * @brief I2C SDA 解锁（从 SDA 被拉低的状态恢复）
- * @note 通过模拟 SCL 时钟脉冲尝试释放 SDA 线，每脉冲间隔 1ms，最多 100 次
+ * @note 委托给 I2C 模块的 I2C_SDAUnlock，通过模拟 SCL 时钟脉冲尝试释放 SDA 线
  */
 void OLED_SDAUnlock(void);
 

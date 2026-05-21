@@ -2,102 +2,19 @@
 #include "oledfont.h"
 #include "delay.h"
 
-#define I2C_TIMEOUT_CNT  (100000)
-
-/**
- * @brief 禁用 I2C 外设，将 SCL/SDA 引脚临时切换为 GPIO 模式
- *
- * 该函数用于解锁 I2C 总线（当 SDA 被从设备意外拉低时），
- * 通过复位 I2C 外设并将 SCL 配置为 GPIO 输出、SDA 配置为 GPIO 输入，
- * 以便通过 GPIO 模拟时钟信号来解除 SDA 锁定。
- *
- * @return 始终返回 0
- */
-static int oled_i2c_disable(void)
-{
-    DL_I2C_reset(I2C_OLED_INST);
-    DL_GPIO_initDigitalOutput(GPIO_I2C_OLED_IOMUX_SCL);
-    DL_GPIO_initDigitalInputFeatures(GPIO_I2C_OLED_IOMUX_SDA,
-             DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_NONE,
-             DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
-    DL_GPIO_clearPins(GPIO_I2C_OLED_SCL_PORT, GPIO_I2C_OLED_SCL_PIN);
-    DL_GPIO_enableOutput(GPIO_I2C_OLED_SCL_PORT, GPIO_I2C_OLED_SCL_PIN);
-    return 0;
-}
-
-/**
- * @brief 重新启用 I2C 外设，将 SCL/SDA 引脚恢复为外设功能模式
- *
- * 该函数与 oled_i2c_disable() 配对使用，在完成 GPIO 位操作后
- * 恢复 I2C 外设的正常通信功能。
- *
- * @return 始终返回 0
- */
-static int oled_i2c_enable(void)
-{
-    DL_I2C_reset(I2C_OLED_INST);
-    DL_GPIO_initPeripheralInputFunctionFeatures(GPIO_I2C_OLED_IOMUX_SDA,
-        GPIO_I2C_OLED_IOMUX_SDA_FUNC, DL_GPIO_INVERSION_DISABLE,
-        DL_GPIO_RESISTOR_NONE, DL_GPIO_HYSTERESIS_DISABLE,
-        DL_GPIO_WAKEUP_DISABLE);
-    DL_GPIO_initPeripheralInputFunctionFeatures(GPIO_I2C_OLED_IOMUX_SCL,
-        GPIO_I2C_OLED_IOMUX_SCL_FUNC, DL_GPIO_INVERSION_DISABLE,
-        DL_GPIO_RESISTOR_NONE, DL_GPIO_HYSTERESIS_DISABLE,
-        DL_GPIO_WAKEUP_DISABLE);
-    DL_GPIO_enableHiZ(GPIO_I2C_OLED_IOMUX_SDA);
-    DL_GPIO_enableHiZ(GPIO_I2C_OLED_IOMUX_SCL);
-    DL_I2C_enablePower(I2C_OLED_INST);
-    SYSCFG_DL_I2C_OLED_init();
-    return 0;
-}
+static I2C_Handle *g_oled_i2c;
 
 void OLED_SDAUnlock(void)
 {
-    uint8_t cycleCnt = 0;
-    oled_i2c_disable();
-    do
-    {
-        DL_GPIO_clearPins(GPIO_I2C_OLED_SCL_PORT, GPIO_I2C_OLED_SCL_PIN);
-        delay_ms(1);
-        DL_GPIO_setPins(GPIO_I2C_OLED_SCL_PORT, GPIO_I2C_OLED_SCL_PIN);
-        delay_ms(1);
-
-        if (DL_GPIO_readPins(GPIO_I2C_OLED_SDA_PORT, GPIO_I2C_OLED_SDA_PIN))
-            break;
-    } while (++cycleCnt < 100);
-    oled_i2c_enable();
+    I2C_SDAUnlock(g_oled_i2c);
 }
 
 void OLED_WriteByte(uint8_t dat, uint8_t mode)
 {
-    unsigned char ptr[2];
-    unsigned long timeout;
-
-    if (mode)
-    {
-        ptr[0] = 0x40;
-        ptr[1] = dat;
-    }
-    else
-    {
-        ptr[0] = 0x00;
-        ptr[1] = dat;
-    }
-
-    DL_I2C_fillControllerTXFIFO(I2C_OLED_INST, ptr, 2);
-    DL_I2C_clearInterruptStatus(I2C_OLED_INST, DL_I2C_INTERRUPT_CONTROLLER_TX_DONE);
-    while (!(DL_I2C_getControllerStatus(I2C_OLED_INST) & DL_I2C_CONTROLLER_STATUS_IDLE));
-    DL_I2C_startControllerTransfer(I2C_OLED_INST, 0x3C, DL_I2C_CONTROLLER_DIRECTION_TX, 2);
-
-    timeout = I2C_TIMEOUT_CNT;
-    while (!DL_I2C_getRawInterruptStatus(I2C_OLED_INST, DL_I2C_INTERRUPT_CONTROLLER_TX_DONE))
-    {
-        if (--timeout == 0)
-        {
-            OLED_SDAUnlock();
-            break;
-        }
-    }
+    uint8_t buf[2];
+    buf[0] = mode ? 0x40 : 0x00;
+    buf[1] = dat;
+    I2C_Write(g_oled_i2c, 0x3C, buf, 2);
 }
 
 void OLED_ColorTurn(uint8_t mode)
@@ -265,9 +182,11 @@ void OLED_DrawBMP(uint8_t x, uint8_t y, uint8_t sizex, uint8_t sizey, uint8_t BM
     }
 }
 
-void OLED_Init(void)
+void OLED_Init(I2C_Handle *i2c)
 {
-    if (DL_I2C_getSDAStatus(I2C_OLED_INST) == DL_I2C_CONTROLLER_SDA_LOW)
+    g_oled_i2c = i2c;
+
+    if (DL_I2C_getSDAStatus(i2c->i2c) == DL_I2C_CONTROLLER_SDA_LOW)
         OLED_SDAUnlock();
 
     delay_ms(200);
