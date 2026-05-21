@@ -31,8 +31,7 @@
  */
 #include "empty.h"
 
-uint8_t state = 0;
-
+static UART_Handle *uart_print;
 
 void test(void);
 
@@ -47,7 +46,15 @@ int main(void)
     Motor_Init();
     Key_Init();
     Servo_Init();
-    UART_init();
+
+    /* 注册 UART0（PRINT）实例 */
+    UART_Config uart_cfg = {
+        .uart         = UART_PRINT_INST,
+        .irqNum       = UART_PRINT_INT_IRQN,
+        .dmaTxChanId  = UART0_DMA_TX_CHAN_ID,
+        .dmaTxTrigger = PRINT_INST_DMA_TRIGGER,
+    };
+    uart_print = UART_Init(&uart_cfg);
 
     while (1)
     {
@@ -55,23 +62,11 @@ int main(void)
 
         // Buzzer_Beep(1000);
         // delay_ms(2000);
-
-        // DL_UART_transmitDataBlocking(PRINT_INST, 'H');
-        // delay_ms(500);
     }
 }
 
 
 void test(void)
 {
-    // static int n = 0;
-    // Buzzer_Beep(500);
-    // delay_ms(1500);
-    // UART0_printfDMA("test");
-    if (UART0RxDone) {
-        UART0_printfDMA("Received %d bytes: %s\n", UART0RxLen, UART0RxBuf);
-        UART0_startReceive();
-    }
+    
 }
-
-
