@@ -6,16 +6,37 @@
 #define __MOTOR_H__
 
 #include "ti_msp_dl_config.h"
+#include "pit_control_tick.h"
 #include "tb6612.h"
 
+
 #define MOTOR_MAX_PWM_DUTY (TB6612_PWM_PERIOD_COUNT - 1)
+
 #define MOTOR_SPEED_MAX 100
 #define MOTOR_SPEED_MIN 0
 
 /* 编码器参数：11线 × 1:30减速比 = 330 脉冲/输出轴转 */
-#define ENCODER_PPR                   11
-#define ENCODER_GEAR_RATIO            30
-#define ENCODER_PULSES_PER_OUTPUT_REV (ENCODER_PPR * ENCODER_GEAR_RATIO)
+#define MOTOR_ENCODER_PPR                   11
+#define MOTOR_ENCODER_GEAR_RATIO            30
+#define MOTOR_ENCODER_PULSES_PER_OUTPUT_REV (MOTOR_ENCODER_PPR * MOTOR_ENCODER_GEAR_RATIO)
+
+/* 编码器 A 相引脚宏定义 */
+#define MOTOR_ENCODER1_OUT_A_PORT GPIO_MOTORs_GPIO_MOTOR1_OUT_A_PORT
+#define MOTOR_ENCODER1_OUT_A_PIN  GPIO_MOTORs_GPIO_MOTOR1_OUT_A_PIN
+#define MOTOR_ENCODER1_OUT_A_IIDX GPIO_MOTORs_GPIO_MOTOR1_OUT_A_IIDX
+#define MOTOR_ENCODER2_OUT_A_PORT GPIO_MOTORs_GPIO_MOTOR2_OUT_A_PORT
+#define MOTOR_ENCODER2_OUT_A_PIN  GPIO_MOTORs_GPIO_MOTOR2_OUT_A_PIN
+#define MOTOR_ENCODER2_OUT_A_IIDX GPIO_MOTORs_GPIO_MOTOR2_OUT_A_IIDX
+
+/* 编码器 B 相引脚宏定义（仅读电平，不触发中断） */
+#define MOTOR_ENCODER1_OUT_B_PORT GPIO_MOTORs_GPIO_MOTOR1_OUT_B_PORT
+#define MOTOR_ENCODER1_OUT_B_PIN  GPIO_MOTORs_GPIO_MOTOR1_OUT_B_PIN
+#define MOTOR_ENCODER2_OUT_B_PORT GPIO_MOTORs_GPIO_MOTOR2_OUT_B_PORT
+#define MOTOR_ENCODER2_OUT_B_PIN  GPIO_MOTORs_GPIO_MOTOR2_OUT_B_PIN
+
+/* 轮子参数 */
+#define WHEEL_RADIUS_MM         68.0f
+#define WHEEL_CIRCUMFERENCE_MM  (2.0f * 3.1415926f * WHEEL_RADIUS_MM)
 
 /**
  * @brief 电机初始化，将电机置于停止状态
@@ -52,36 +73,34 @@ void Motor_Brake(void);
 void Motor_Stop(void);
 
 /**
- * @brief 获取电机1编码器累计脉冲数
- * @return 脉冲计数值
+ * @brief 获取电机1当前转速
+ * @return 转速值（RPM）
  */
-uint32_t Motor_GetEncoder1Pulse(void);
+float Motor_GetEncoder1RPM(void);
 
 /**
- * @brief 获取电机2编码器累计脉冲数
- * @return 脉冲计数值
+ * @brief 获取电机2当前转速
+ * @return 转速值（RPM）
  */
-uint32_t Motor_GetEncoder2Pulse(void);
+float Motor_GetEncoder2RPM(void);
 
 /**
- * @brief 获取电机1当前转速（RPM）
- * @return 转速值（转/分钟），正转时为正值，反转时需要结合方向判断
- * @note 需周期性调用 Motor_EncoderUpdate 来更新转速计算
+ * @brief 获取电机1当前线速度
+ * @return 线速度（mm/s）
  */
-int32_t Motor_GetEncoder1RPM(void);
+float Motor_GetEncoder1Speed(void);
 
 /**
- * @brief 获取电机2当前转速（RPM）
- * @return 转速值（转/分钟）
- * @note 需周期性调用 Motor_EncoderUpdate 来更新转速计算
+ * @brief 获取电机2当前线速度
+ * @return 线速度（mm/s）
  */
-int32_t Motor_GetEncoder2RPM(void);
+float Motor_GetEncoder2Speed(void);
 
 /**
- * @brief 编码器转速更新（需在周期性中断中调用，如 PIT 20ms 回调）
- * @note 根据两次调用间的脉冲差值计算 RPM
+ * @brief 编码器转速更新（需在周期性中断中调用）
+ * @note 根据两次调用间的脉冲差值计算 RPM 和线速度
  */
-void Motor_EncoderUpdate(void);
+void Motor_TickHandler(void);
 
 /**
  * @brief 清零编码器脉冲计数

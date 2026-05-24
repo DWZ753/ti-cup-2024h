@@ -1,4 +1,4 @@
-#include "UART.h"
+#include "uart.h"
 
 #define UART_MAX_INSTANCES 4
 
