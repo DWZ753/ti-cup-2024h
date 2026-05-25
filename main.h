@@ -12,3 +12,5 @@
 #include "key.h"
 #include "uart.h"
 #include "oled.h"
+#include "bmi088.h"
+#include "mahony.h"

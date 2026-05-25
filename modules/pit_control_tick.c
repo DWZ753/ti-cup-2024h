@@ -23,17 +23,6 @@ bool PIT_Control_Tick_RegisterCallback(PIT_Control_Callback_t callback)
     return true;
 }
 
-
-/**
- * @brief PIT自定义实例中断服务程序
- * 
- * 当PIT定时器产生LOAD中断时，依次执行所有已注册的回调任务。
- * 该函数由硬件中断自动调用，用于处理周期性定时任务。
- * 
- * @return 无
- * 
- * @note 此函数在中断上下文中执行，回调函数应尽量简短以避免影响系统实时性
- */
 void PIT_FOR_CONTROL_INST_IRQHandler(void)
 {
     switch(DL_TimerG_getPendingInterrupt(PIT_FOR_CONTROL_INST))

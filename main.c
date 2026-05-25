@@ -1,12 +1,7 @@
 #include "main.h"
-#include "application/pid.h"
 
 static UART_Handle *uart_print;
-static PID_Controller speed_pid;
-
-static void Encoder_Display(void);
-
-uint8_t state = 0;
+int state;
 
 int main(void)
 {
@@ -21,22 +16,22 @@ int main(void)
     Servo_Init();
 
     /* 注册 I2C0（OLED 用） */
-    I2C_Config i2c_cfg = {
-        .i2c          = I2C_OLED_INST,
-        .sclPort      = GPIO_I2C_OLED_SCL_PORT,
-        .sclPin       = GPIO_I2C_OLED_SCL_PIN,
-        .sclIomux     = GPIO_I2C_OLED_IOMUX_SCL,
-        .sclIomuxFunc = GPIO_I2C_OLED_IOMUX_SCL_FUNC,
-        .sdaPort      = GPIO_I2C_OLED_SDA_PORT,
-        .sdaPin       = GPIO_I2C_OLED_SDA_PIN,
-        .sdaIomux     = GPIO_I2C_OLED_IOMUX_SDA,
-        .sdaIomuxFunc = GPIO_I2C_OLED_IOMUX_SDA_FUNC,
-        .syscfgInit   = SYSCFG_DL_I2C_OLED_init,
-    };
-    I2C_Handle *oled_i2c = I2C_Init(&i2c_cfg);
-    OLED_Init(oled_i2c);
+    // I2C_Config i2c_cfg = {
+    //     .i2c          = I2C_OLED_INST,
+    //     .sclPort      = GPIO_I2C_OLED_SCL_PORT,
+    //     .sclPin       = GPIO_I2C_OLED_SCL_PIN,
+    //     .sclIomux     = GPIO_I2C_OLED_IOMUX_SCL,
+    //     .sclIomuxFunc = GPIO_I2C_OLED_IOMUX_SCL_FUNC,
+    //     .sdaPort      = GPIO_I2C_OLED_SDA_PORT,
+    //     .sdaPin       = GPIO_I2C_OLED_SDA_PIN,
+    //     .sdaIomux     = GPIO_I2C_OLED_IOMUX_SDA,
+    //     .sdaIomuxFunc = GPIO_I2C_OLED_IOMUX_SDA_FUNC,
+    //     .syscfgInit   = SYSCFG_DL_I2C_OLED_init,
+    // };
+    // I2C_Handle *oled_i2c = I2C_Init(&i2c_cfg);
+    // OLED_Init(oled_i2c);
 
-    /* 注册 UART0（PRINT）实例 */
+    /* 注册 UART0（PRINT） */
     UART_Config uart_cfg = {
         .uart         = UART_PRINT_INST,
         .irqNum       = UART_PRINT_INT_IRQN,
@@ -45,34 +40,44 @@ int main(void)
     };
     uart_print = UART_Init(&uart_cfg);
 
-    /* 初始化速度环 PID，输出限幅 = MOTOR_MAX_SPEED_MM_S */
-    PID_Init(&speed_pid,
-             3.0f,                  /* Kp */
-             0.0f,                  /* Ki */
-             0.00f,                 /* Kd */
-             MOTOR_MAX_SPEED_MM_S,  /* 积分限幅 */
-             MOTOR_MAX_SPEED_MM_S); /* 输出限幅：PID 输出为 mm/s */
+    /* 初始化 BMI088 */
+    BMI088_Config bmi_cfg = {
+        .spi         = SPI_BMI088_INST,
+        .csAccelPort = GPIO_BMI088_PORT,
+        .csAccelPin  = GPIO_BMI088_CS1_PIN,
+        .csGyroPort  = GPIO_BMI088_PORT,
+        .csGyroPin   = GPIO_BMI088_CS2_PIN,
+    };
+    BMI088_Init(&bmi_cfg);
 
-    PID_SetTarget(&speed_pid, 1500.0f); /* 目标速度 mm/s */
+    /* 初始化 Mahony 滤波器 (Kp=18, Ki=0.018, dt=0.002 → 500Hz) */
+    struct MAHONY_FILTER_t mahony;
+    mahony_init(&mahony, 18.0f, 0.018f, 0.002f);
+
+    float accel[3] = {0}, gyro[3] = {0};
+    Axis3f gyro_axis, acc_axis;
 
     while (1)
     {
-        /* PID 速度环：以两路编码器速度均值作为反馈 */
-        // float cur_speed = (Motor_GetEncoder1Speed() + Motor_GetEncoder2Speed()) * 0.5f;
-        float cur_speed = Motor_GetEncoder2Speed();
-        float pid_out   = PID_Compute(&speed_pid, cur_speed);
-        Motor_SetSpeed(pid_out);
+        /* 读取传感器数据 */
+        BMI088_ReadAccel(accel);   /* m/s² */
+        BMI088_ReadGyro(gyro);     /* rad/s */
 
-        Encoder_Display();
-        delay_ms(20);
+        /* 输入 Mahony 滤波器 */
+        acc_axis.x  = accel[0]; acc_axis.y  = accel[1]; acc_axis.z  = accel[2];
+        gyro_axis.x = gyro[0];  gyro_axis.y = gyro[1];  gyro_axis.z = gyro[2];
+
+        mahony_input(&mahony, gyro_axis, acc_axis);
+        mahony_update(&mahony);
+        mahony_output(&mahony);
+
+        /* 串口输出姿态角 */
+        UART_Printf(uart_print, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
+                    accel[0], accel[1], accel[2],
+                    gyro[0], gyro[1], gyro[2],
+                    mahony.pitch, mahony.roll, mahony.yaw,
+                    0.0f);
+
+        delay_ms(1);   /* ~500Hz 循环频率 */
     }
-}
-
-static void Encoder_Display(void)
-{
-    float sp1 = Motor_GetEncoder1Speed();
-    float sp2 = Motor_GetEncoder2Speed();
-
-    UART_Printf(uart_print, "%.1f,%.1f,%.1f\n",
-                speed_pid.target, speed_pid.output, sp1);
 }
