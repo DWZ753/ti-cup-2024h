@@ -77,7 +77,7 @@ GPIO2.associatedPins[4].pin.$assign      = "PA15";
 GPIO2.associatedPins[5].$name            = "GPIO_MOTOR1_OUT_B";
 GPIO2.associatedPins[5].direction        = "INPUT";
 GPIO2.associatedPins[5].internalResistor = "PULL_DOWN";
-GPIO2.associatedPins[5].pin.$assign      = "PA16";
+GPIO2.associatedPins[5].pin.$assign      = "PA24";
 GPIO2.associatedPins[6].$name            = "GPIO_MOTOR2_OUT_A";
 GPIO2.associatedPins[6].direction        = "INPUT";
 GPIO2.associatedPins[6].internalResistor = "PULL_DOWN";
@@ -187,7 +187,6 @@ TIMER2.interrupts         = ["LOAD"];
 TIMER2.timerStartTimer    = true;
 TIMER2.peripheral.$assign = "TIMG0";
 
-UART1.targetBaudRate                   = 115200;
 UART1.$name                            = "PRINT";
 UART1.enabledDMATXTriggers             = "DL_UART_DMA_INTERRUPT_TX";
 UART1.enabledInterrupts                = ["DMA_DONE_TX","RX"];

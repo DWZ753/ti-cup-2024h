@@ -1,7 +1,11 @@
 /* 本模块在使用tb6612电机驱动芯片时不需要修改
  * @todo 添加使用其他电机驱动芯片的接口
+ * @todo 左电机（即 motor1）的测速有bug，等待修复
  */
 #include "motor.h"
+
+/* PWM 占空比下限：低于此值电机无法转动 */
+#define MOTOR_MIN_DUTY 100
 
 static volatile int32_t g_encoder1_pulse;
 static volatile int32_t g_encoder2_pulse;
@@ -18,34 +22,31 @@ void Motor_Init(void)
     PIT_Control_Tick_RegisterCallback(Motor_TickHandler);
 }
 
-uint32_t Motor_LimitSpeed(uint32_t speed)
+void Motor_SetSpeed(float speed_mm_s)
 {
-    if (speed > MOTOR_SPEED_MAX)
+    float abs_speed = (speed_mm_s >= 0.0f) ? speed_mm_s : -speed_mm_s;
+
+    uint32_t duty = (uint32_t)(abs_speed / MOTOR_MAX_SPEED_MM_S * MOTOR_MAX_PWM_DUTY);
+
+    if (duty > MOTOR_MAX_PWM_DUTY)
+        duty = MOTOR_MAX_PWM_DUTY;
+
+    if (duty < MOTOR_MIN_DUTY)
     {
-        speed = MOTOR_SPEED_MAX;
+        Motor_Brake();
+        return;
     }
-    if (speed < MOTOR_SPEED_MIN)
+
+    if (speed_mm_s >= 0.0f)
     {
-        speed = MOTOR_SPEED_MIN;
+        TB6612_A_Forward(duty);
+        TB6612_B_Forward(duty);
     }
-
-    return speed;
-}
-
-void Motor_Forward(uint32_t speed)
-{
-    uint32_t duty = Motor_LimitSpeed(speed) * MOTOR_MAX_PWM_DUTY / MOTOR_SPEED_MAX;
-
-    TB6612_A_Forward(duty);
-    TB6612_B_Forward(duty);
-}
-
-void Motor_Backward(uint32_t speed)
-{
-    uint32_t duty = Motor_LimitSpeed(speed) * MOTOR_MAX_PWM_DUTY / MOTOR_SPEED_MAX;
-
-    TB6612_A_Backward(duty);
-    TB6612_B_Backward(duty);
+    else
+    {
+        TB6612_A_Backward(duty);
+        TB6612_B_Backward(duty);
+    }
 }
 
 void Motor_Brake(void)
@@ -60,7 +61,6 @@ void Motor_Stop(void)
     TB6612_B_Stop();
 }
 
-/* 编码器中断处理：A 相上升沿触发，读 B 相电平判方向 */
 static void encoder_isr(void)
 {
     if (DL_GPIO_getEnabledInterruptStatus(MOTOR_ENCODER1_OUT_A_PORT, MOTOR_ENCODER1_OUT_A_PIN))
@@ -113,6 +113,16 @@ float Motor_GetEncoder1Speed(void)
 float Motor_GetEncoder2Speed(void)
 {
     return g_encoder2_speed;
+}
+
+int32_t Motor_GetEncoder1Pulse(void)
+{
+    return g_encoder1_pulse;
+}
+
+int32_t Motor_GetEncoder2Pulse(void)
+{
+    return g_encoder2_pulse;
 }
 
 void Motor_TickHandler(void)

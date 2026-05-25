@@ -1,10 +1,13 @@
 #include "main.h"
+#include "application/pid.h"
 
 static UART_Handle *uart_print;
+static PID_Controller speed_pid;
 
 static void Encoder_Display(void);
 
 uint8_t state = 0;
+
 int main(void)
 {
     SYSCFG_DL_init();
@@ -42,52 +45,34 @@ int main(void)
     };
     uart_print = UART_Init(&uart_cfg);
 
-    Motor_Forward(50);
+    /* 初始化速度环 PID，输出限幅 = MOTOR_MAX_SPEED_MM_S */
+    PID_Init(&speed_pid,
+             3.0f,                  /* Kp */
+             0.0f,                  /* Ki */
+             0.00f,                 /* Kd */
+             MOTOR_MAX_SPEED_MM_S,  /* 积分限幅 */
+             MOTOR_MAX_SPEED_MM_S); /* 输出限幅：PID 输出为 mm/s */
+
+    PID_SetTarget(&speed_pid, 1500.0f); /* 目标速度 mm/s */
 
     while (1)
     {
-        // Buzzer_Beep(100);
+        /* PID 速度环：以两路编码器速度均值作为反馈 */
+        // float cur_speed = (Motor_GetEncoder1Speed() + Motor_GetEncoder2Speed()) * 0.5f;
+        float cur_speed = Motor_GetEncoder2Speed();
+        float pid_out   = PID_Compute(&speed_pid, cur_speed);
+        Motor_SetSpeed(pid_out);
+
         Encoder_Display();
-        delay_ms(100);
+        delay_ms(20);
     }
 }
 
 static void Encoder_Display(void)
 {
-    float speed1 = Motor_GetEncoder1Speed();
-    float speed2 = Motor_GetEncoder2Speed();
-    float rpm1   = Motor_GetEncoder1RPM();
-    float rpm2   = Motor_GetEncoder2RPM();
+    float sp1 = Motor_GetEncoder1Speed();
+    float sp2 = Motor_GetEncoder2Speed();
 
-    int32_t rpm1_x10   = (int32_t)(rpm1 * 10.0f);
-    int32_t rpm2_x10   = (int32_t)(rpm2 * 10.0f);
-    int32_t speed1_x10 = (int32_t)(speed1 * 10.0f);
-    int32_t speed2_x10 = (int32_t)(speed2 * 10.0f);
-
-    char buf[32];
-
-    {
-        int abs10 = rpm1_x10 >= 0 ? rpm1_x10 : -rpm1_x10;
-        sprintf(buf, "M1 RPM: %c%4d.%d", rpm1_x10 < 0 ? '-' : ' ',
-                (int)(abs10 / 10), (int)(abs10 % 10));
-        OLED_ShowString(0, 0, (uint8_t *)buf, 16);
-    }
-    {
-        int abs10 = rpm2_x10 >= 0 ? rpm2_x10 : -rpm2_x10;
-        sprintf(buf, "M2 RPM: %c%4d.%d", rpm2_x10 < 0 ? '-' : ' ',
-                (int)(abs10 / 10), (int)(abs10 % 10));
-        OLED_ShowString(0, 2, (uint8_t *)buf, 16);
-    }
-    {
-        int abs10 = speed1_x10 >= 0 ? speed1_x10 : -speed1_x10;
-        sprintf(buf, "M1: %c%4d.%d mm/s", speed1_x10 < 0 ? '-' : ' ',
-                (int)(abs10 / 10), (int)(abs10 % 10));
-        OLED_ShowString(0, 4, (uint8_t *)buf, 16);
-    }
-    {
-        int abs10 = speed2_x10 >= 0 ? speed2_x10 : -speed2_x10;
-        sprintf(buf, "M2: %c%4d.%d mm/s", speed2_x10 < 0 ? '-' : ' ',
-                (int)(abs10 / 10), (int)(abs10 % 10));
-        OLED_ShowString(0, 6, (uint8_t *)buf, 16);
-    }
+    UART_Printf(uart_print, "%.1f,%.1f,%.1f\n",
+                speed_pid.target, speed_pid.output, sp1);
 }

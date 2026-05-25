@@ -9,11 +9,10 @@
 #include "pit_control_tick.h"
 #include "tb6612.h"
 
-
 #define MOTOR_MAX_PWM_DUTY (TB6612_PWM_PERIOD_COUNT - 1)
 
-#define MOTOR_SPEED_MAX 100
-#define MOTOR_SPEED_MIN 0
+/* 电机最高转速 RPM（实测） */
+#define MOTOR_MAX_RPM 300.0f
 
 /* 编码器参数：11线 × 1:30减速比 = 330 脉冲/输出轴转 */
 #define MOTOR_ENCODER_PPR                   11
@@ -38,29 +37,19 @@
 #define WHEEL_RADIUS_MM         68.0f
 #define WHEEL_CIRCUMFERENCE_MM  (2.0f * 3.1415926f * WHEEL_RADIUS_MM)
 
+/* 最大线速度 mm/s = 最高转速 × 周长 / 60 */
+#define MOTOR_MAX_SPEED_MM_S    (MOTOR_MAX_RPM / 60.0f * WHEEL_CIRCUMFERENCE_MM)
+
 /**
  * @brief 电机初始化，将电机置于停止状态
  */
 void Motor_Init(void);
 
 /**
- * @brief 将电机速度值限制在有效范围 [MOTOR_SPEED_MIN, MOTOR_SPEED_MAX] 内
- * @param speed 原始速度值
- * @return 限制后的速度值
+ * @brief 设置电机目标线速度（统一接口，正值前进 / 负值后退）
+ * @param speed_mm_s 目标线速度 mm/s，范围 [-MOTOR_MAX_SPEED_MM_S, MOTOR_MAX_SPEED_MM_S]
  */
-uint32_t Motor_LimitSpeed(uint32_t speed);
-
-/**
- * @brief 两路电机同时正转
- * @param speed 速度值 [0, MOTOR_SPEED_MAX]
- */
-void Motor_Forward(uint32_t speed);
-
-/**
- * @brief 两路电机同时反转
- * @param speed 速度值 [0, MOTOR_SPEED_MAX]
- */
-void Motor_Backward(uint32_t speed);
+void Motor_SetSpeed(float speed_mm_s);
 
 /**
  * @brief 两路电机同时制动
@@ -97,8 +86,20 @@ float Motor_GetEncoder1Speed(void);
 float Motor_GetEncoder2Speed(void);
 
 /**
- * @brief 编码器转速更新（需在周期性中断中调用）
- * @note 根据两次调用间的脉冲差值计算 RPM 和线速度
+ * @brief 获取电机1编码器原始脉冲计数
+ * @return 脉冲计数值
+ */
+int32_t Motor_GetEncoder1Pulse(void);
+
+/**
+ * @brief 获取电机2编码器原始脉冲计数
+ * @return 脉冲计数值
+ */
+int32_t Motor_GetEncoder2Pulse(void);
+
+/**
+ * @brief 编码器转速更新（在 PIT 控制中断中调用）
+ * @note 根据两次调用间的脉冲差值计算 RPM 和线速度，调用周期 20ms
  */
 void Motor_TickHandler(void);
 
