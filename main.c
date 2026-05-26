@@ -1,6 +1,13 @@
 #include "main.h"
 
 static UART_Handle *uart_print;
+static volatile uint32_t imu_ticks;  /* 1ms PIT 滴答计数 */
+
+static void imu_tick_cb(void)
+{
+    imu_ticks++;
+}
+
 int state;
 
 int main(void)
@@ -8,6 +15,7 @@ int main(void)
     SYSCFG_DL_init();
 
     PIT_Custom_Tick_Init();
+    PIT_Custom_Tick_RegisterCallback(imu_tick_cb);
     PIT_Control_Tick_Init();
     Buzzer_Init();
     TB6612_Init();
@@ -50,34 +58,41 @@ int main(void)
     };
     BMI088_Init(&bmi_cfg);
 
-    /* 初始化 Mahony 滤波器 (Kp=18, Ki=0.018, dt=0.002 → 500Hz) */
+    /* 初始化 Mahony 滤波器 */
     struct MAHONY_FILTER_t mahony;
-    mahony_init(&mahony, 18.0f, 0.018f, 0.002f);
+    mahony_init(&mahony, 15.0f, 0.002f, 0.002f);
 
-    float accel[3] = {0}, gyro[3] = {0};
-    Axis3f gyro_axis, acc_axis;
+    float    accel[3] = {0}, gyro[3] = {0};
+    Axis3f   gyro_axis, acc_axis;
+    uint32_t last_imu    = 0;
+    uint32_t last_output = 0;
 
     while (1)
     {
-        /* 读取传感器数据 */
-        BMI088_ReadAccel(accel);   /* m/s² */
-        BMI088_ReadGyro(gyro);     /* rad/s */
+        uint32_t now = imu_ticks;
 
-        /* 输入 Mahony 滤波器 */
-        acc_axis.x  = accel[0]; acc_axis.y  = accel[1]; acc_axis.z  = accel[2];
-        gyro_axis.x = gyro[0];  gyro_axis.y = gyro[1];  gyro_axis.z = gyro[2];
+        /* Mahony更新 */
+        if (now - last_imu >= 2) {
+            last_imu = now;
 
-        mahony_input(&mahony, gyro_axis, acc_axis);
-        mahony_update(&mahony);
-        mahony_output(&mahony);
+            BMI088_ReadAccel(accel);   /* m/s² */
+            BMI088_ReadGyro(gyro);     /* rad/s */
 
-        /* 串口输出姿态角 */
-        UART_Printf(uart_print, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
-                    accel[0], accel[1], accel[2],
-                    gyro[0], gyro[1], gyro[2],
-                    mahony.pitch, mahony.roll, mahony.yaw,
-                    0.0f);
+            acc_axis.x  = accel[0]; acc_axis.y  = accel[1]; acc_axis.z  = accel[2];
+            gyro_axis.x = gyro[0];  gyro_axis.y = gyro[1];  gyro_axis.z = gyro[2];
 
-        delay_ms(1);   /* ~500Hz 循环频率 */
+            mahony_input(&mahony, gyro_axis, acc_axis);
+            mahony_update(&mahony);
+            mahony_output(&mahony);
+        }
+
+        /* 串口输出 */
+        if (now - last_output >= 10) {
+            last_output = now;
+            UART_Printf(uart_print, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
+                        mahony.q0, mahony.q1, mahony.q2, mahony.q3,
+                        mahony.pitch, mahony.roll, mahony.yaw,
+                        accel[0], accel[1], accel[2]);
+        }
     }
 }

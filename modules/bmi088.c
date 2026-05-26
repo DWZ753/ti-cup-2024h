@@ -12,12 +12,9 @@
 
 #define BMI088_SOFTRESET_VALUE  0xB6
 
-/* ========== 模块级静态指针 ========== */
+
 static const BMI088_Config *g_cfg;
 
-/* ========== SPI 底层操作 ========== */
-
-/** 全双工读写：发送 tx_data，返回同时接收到的字节 */
 static uint8_t SPI_RW(uint8_t tx_data)
 {
     DL_SPI_transmitData8(g_cfg->spi, tx_data);
@@ -27,7 +24,6 @@ static uint8_t SPI_RW(uint8_t tx_data)
     return rx;
 }
 
-/** 拉低指定 CS 引脚 */
 static void CS_Select(uint8_t cs_sel)
 {
     if (cs_sel == 0) {
@@ -37,7 +33,6 @@ static void CS_Select(uint8_t cs_sel)
     }
 }
 
-/** 拉高指定 CS 引脚 */
 static void CS_Deselect(uint8_t cs_sel)
 {
     if (cs_sel == 0) {
@@ -47,13 +42,11 @@ static void CS_Deselect(uint8_t cs_sel)
     }
 }
 
-/* ========== BMI088 寄存器读写 ========== */
-
 static void BMI088_WriteReg(uint8_t reg, uint8_t data, uint8_t cs_sel)
 {
     CS_Select(cs_sel);
 
-    SPI_RW(reg & 0x7F);   /* bit7=0 表示写 */
+    SPI_RW(reg & 0x7F);
     SPI_RW(data);
 
     delay_ms(1);
@@ -65,10 +58,10 @@ static void BMI088_ReadBytes(uint8_t reg, uint8_t *buf, uint8_t len, uint8_t cs_
 {
     CS_Select(cs_sel);
 
-    SPI_RW(reg | 0x80);   /* bit7=1 表示读 */
+    SPI_RW(reg | 0x80);
 
     if (cs_sel == 0) {
-        SPI_RW(0xFF);     /* 加速度计 dummy 字节 */
+        SPI_RW(0xFF);
     }
 
     for (uint8_t i = 0; i < len; i++) {
@@ -78,14 +71,10 @@ static void BMI088_ReadBytes(uint8_t reg, uint8_t *buf, uint8_t len, uint8_t cs_
     CS_Deselect(cs_sel);
 }
 
-/* ========== 调试：暴露底层读接口 ========== */
-
 void BMI088_ReadRawBytes(uint8_t reg, uint8_t *buf, uint8_t len, uint8_t cs_sel)
 {
     BMI088_ReadBytes(reg, buf, len, cs_sel);
 }
-
-/* ========== 芯片 ID 读取（调试用） ========== */
 
 uint8_t BMI088_ReadAccelID(void)
 {
@@ -101,8 +90,6 @@ uint8_t BMI088_ReadGyroID(void)
     return id;
 }
 
-/* ========== 芯片初始化 ========== */
-
 static uint8_t BMI088_Accel_Init(void)
 {
     BMI088_WriteReg(ACCEL_SOFTRESET, BMI088_SOFTRESET_VALUE, 0);
@@ -117,7 +104,7 @@ static uint8_t BMI088_Accel_Init(void)
 static uint8_t BMI088_Gyro_Init(void)
 {
     BMI088_WriteReg(GYRO_SOFTRESET, BMI088_SOFTRESET_VALUE, 1);
-    delay_ms(30);   /* 陀螺仪复位必须等 30ms */
+    delay_ms(30);
 
     return 0;
 }
@@ -130,8 +117,6 @@ uint8_t BMI088_Init(const BMI088_Config *cfg)
     err |= BMI088_Gyro_Init();
     return err;
 }
-
-/* ========== 传感器数据读取 ========== */
 
 void BMI088_ReadAccel(float accel[3])
 {
@@ -152,7 +137,7 @@ void BMI088_ReadGyro(float gyro[3])
     uint8_t buf[8] = {0};
     BMI088_ReadBytes(GYRO_CHIP_ID, buf, 8, 1);
 
-    if (buf[0] == 0x0F) {   /* 校验芯片 ID */
+    if (buf[0] == 0x0F) {
         int16_t raw_x = (int16_t)((buf[3] << 8) | buf[2]);
         int16_t raw_y = (int16_t)((buf[5] << 8) | buf[4]);
         int16_t raw_z = (int16_t)((buf[7] << 8) | buf[6]);

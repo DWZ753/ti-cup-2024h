@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "ti_msp_dl_config.h"
 
-/* ========== 量程选择（暂未使用，保留以备后续配置） ========== */
+/* ========== 量程选择（暂未使用） ========== */
 #define BMI088_ACCEL_RANGE_3G   0x00
 #define BMI088_ACCEL_RANGE_6G   0x01
 #define BMI088_ACCEL_RANGE_12G  0x02
@@ -16,7 +16,7 @@
 /* 加速度计: ±6g → m/s², (6*9.8)/32768 ≈ 0.001795 */
 #define BMI088_ACCEL_SENSITIVITY  0.001795f
 /* 陀螺仪: ±2000°/s → rad/s, (2000*π/180)/32768 ≈ 0.001065 */
-#define BMI088_GYRO_2000_SEN      0.00106526443603169529841533860381f
+#define BMI088_GYRO_2000_SEN      0.001065264436f
 
 /* ========== 初始化配置 ========== */
 typedef struct {
