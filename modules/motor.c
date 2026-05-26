@@ -4,7 +4,7 @@
  */
 #include "motor.h"
 
-/* PWM 占空比下限：低于此值电机无法转动 */
+// PWM 占空比下限：低于此值电机无法转动
 #define MOTOR_MIN_DUTY 100
 
 static volatile int32_t g_encoder1_pulse;

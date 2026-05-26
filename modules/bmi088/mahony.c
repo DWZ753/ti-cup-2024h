@@ -37,30 +37,30 @@ void mahony_update(struct MAHONY_FILTER_t *mf)
     float normalise;
     float ex, ey, ez;
 
-    /* BMI088 陀螺仪输出已是 rad/s，无需 DEG2RAD 转换 */
+    // BMI088 陀螺仪输出已是 rad/s，无需 DEG2RAD 转换
 
-    /* 单位化加速度 */
+    // 单位化加速度
     normalise = invSqrt(mf->acc.x * mf->acc.x + mf->acc.y * mf->acc.y + mf->acc.z * mf->acc.z);
     mf->acc.x *= normalise;
     mf->acc.y *= normalise;
     mf->acc.z *= normalise;
 
-    /* 加速度与重力方向的叉积误差 */
+    // 加速度与重力方向的叉积误差
     ex = (mf->acc.y * mf->rMat[2][2] - mf->acc.z * mf->rMat[2][1]);
     ey = (mf->acc.z * mf->rMat[2][0] - mf->acc.x * mf->rMat[2][2]);
     ez = (mf->acc.x * mf->rMat[2][1] - mf->acc.y * mf->rMat[2][0]);
 
-    /* 积分误差累计 */
+    // 积分误差累计
     mf->exInt += mf->Ki * ex * mf->dt;
     mf->eyInt += mf->Ki * ey * mf->dt;
     mf->ezInt += mf->Ki * ez * mf->dt;
 
-    /* PI 修正陀螺零偏 */
+    // PI 修正陀螺零偏
     mf->gyro.x += mf->Kp * ex + mf->exInt;
     mf->gyro.y += mf->Kp * ey + mf->eyInt;
     mf->gyro.z += mf->Kp * ez + mf->ezInt;
 
-    /* 一阶近似，四元数更新 */
+    // 一阶近似，四元数更新
     float q0Last = mf->q0;
     float q1Last = mf->q1;
     float q2Last = mf->q2;
@@ -71,7 +71,7 @@ void mahony_update(struct MAHONY_FILTER_t *mf)
     mf->q2 += ( q0Last * mf->gyro.y - q1Last * mf->gyro.z + q3Last * mf->gyro.x) * halfT;
     mf->q3 += ( q0Last * mf->gyro.z + q1Last * mf->gyro.y - q2Last * mf->gyro.x) * halfT;
 
-    /* 单位化四元数 */
+    // 单位化四元数
     normalise = invSqrt(mf->q0 * mf->q0 + mf->q1 * mf->q1 + mf->q2 * mf->q2 + mf->q3 * mf->q3);
     mf->q0 *= normalise;
     mf->q1 *= normalise;

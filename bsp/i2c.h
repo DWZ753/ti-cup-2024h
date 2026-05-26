@@ -8,16 +8,16 @@
 
 /** I2C 初始化配置 */
 typedef struct {
-    I2C_Regs   *i2c;             /* I2C 外设基址                     */
-    GPIO_Regs  *sclPort;         /* SCL GPIO 端口（SDA 解锁时用）    */
-    uint32_t    sclPin;          /* SCL GPIO 引脚位掩码              */
-    uint32_t    sclIomux;        /* SCL IOMUX                        */
-    uint32_t    sclIomuxFunc;    /* SCL IOMUX 外设功能               */
-    GPIO_Regs  *sdaPort;         /* SDA GPIO 端口（SDA 解锁时用）    */
-    uint32_t    sdaPin;          /* SDA GPIO 引脚位掩码              */
-    uint32_t    sdaIomux;        /* SDA IOMUX                        */
-    uint32_t    sdaIomuxFunc;    /* SDA IOMUX 外设功能               */
-    void      (*syscfgInit)(void); /* SysConfig 生成的初始化函数     */
+    I2C_Regs   *i2c;             // I2C 外设基址
+    GPIO_Regs  *sclPort;         // SCL GPIO 端口（SDA 解锁时用）
+    uint32_t    sclPin;          // SCL GPIO 引脚位掩码
+    uint32_t    sclIomux;        // SCL IOMUX
+    uint32_t    sclIomuxFunc;    // SCL IOMUX 外设功能
+    GPIO_Regs  *sdaPort;         // SDA GPIO 端口（SDA 解锁时用）
+    uint32_t    sdaPin;          // SDA GPIO 引脚位掩码
+    uint32_t    sdaIomux;        // SDA IOMUX
+    uint32_t    sdaIomuxFunc;    // SDA IOMUX 外设功能
+    void      (*syscfgInit)(void); // SysConfig 生成的初始化函数
 } I2C_Config;
 
 /** I2C 运行时句柄 */

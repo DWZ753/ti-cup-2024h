@@ -11,6 +11,7 @@
 #include "servo.h"
 #include "key.h"
 #include "uart.h"
+#include "spi.h"
 #include "oled.h"
 #include "bmi088.h"
 #include "mahony.h"

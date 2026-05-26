@@ -1,7 +1,7 @@
 #include "main.h"
 
 static UART_Handle *uart_print;
-static volatile uint32_t imu_ticks;  /* 1ms PIT 滴答计数 */
+static volatile uint32_t imu_ticks;  // 1ms PIT 滴答计数
 
 static void imu_tick_cb(void)
 {
@@ -23,7 +23,7 @@ int main(void)
     Key_Init();
     Servo_Init();
 
-    /* 注册 I2C0（OLED 用） */
+    // 注册 I2C0（OLED 用）
     // I2C_Config i2c_cfg = {
     //     .i2c          = I2C_OLED_INST,
     //     .sclPort      = GPIO_I2C_OLED_SCL_PORT,
@@ -39,7 +39,7 @@ int main(void)
     // I2C_Handle *oled_i2c = I2C_Init(&i2c_cfg);
     // OLED_Init(oled_i2c);
 
-    /* 注册 UART0（PRINT） */
+    // 注册 UART0（PRINT）
     UART_Config uart_cfg = {
         .uart         = UART_PRINT_INST,
         .irqNum       = UART_PRINT_INT_IRQN,
@@ -48,17 +48,14 @@ int main(void)
     };
     uart_print = UART_Init(&uart_cfg);
 
-    /* 初始化 BMI088 */
-    BMI088_Config bmi_cfg = {
-        .spi         = SPI_BMI088_INST,
-        .csAccelPort = GPIO_BMI088_PORT,
-        .csAccelPin  = GPIO_BMI088_CS1_PIN,
-        .csGyroPort  = GPIO_BMI088_PORT,
-        .csGyroPin   = GPIO_BMI088_CS2_PIN,
-    };
-    BMI088_Init(&bmi_cfg);
+    // 注册 SPI (BMI088)
+    SPI_Config spi_cfg = { .spi = SPI_BMI088_INST };
+    SPI_Handle *spi_bmi088 = SPI_Init(&spi_cfg);
 
-    /* 初始化 Mahony 滤波器 */
+    // 初始化 BMI088
+    BMI088_Init(spi_bmi088);
+
+    // 初始化 Mahony 滤波器
     struct MAHONY_FILTER_t mahony;
     mahony_init(&mahony, 15.0f, 0.002f, 0.002f);
 
@@ -71,12 +68,12 @@ int main(void)
     {
         uint32_t now = imu_ticks;
 
-        /* Mahony更新 */
+        // Mahony更新
         if (now - last_imu >= 2) {
             last_imu = now;
 
-            BMI088_ReadAccel(accel);   /* m/s² */
-            BMI088_ReadGyro(gyro);     /* rad/s */
+            BMI088_ReadAccel(accel);   // m/s²
+            BMI088_ReadGyro(gyro);     // rad/s
 
             acc_axis.x  = accel[0]; acc_axis.y  = accel[1]; acc_axis.z  = accel[2];
             gyro_axis.x = gyro[0];  gyro_axis.y = gyro[1];  gyro_axis.z = gyro[2];
@@ -86,7 +83,7 @@ int main(void)
             mahony_output(&mahony);
         }
 
-        /* 串口输出 */
+        // 串口输出
         if (now - last_output >= 10) {
             last_output = now;
             UART_Printf(uart_print, "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
