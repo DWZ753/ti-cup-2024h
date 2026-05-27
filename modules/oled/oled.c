@@ -182,11 +182,23 @@ void OLED_DrawBMP(uint8_t x, uint8_t y, uint8_t sizex, uint8_t sizey, uint8_t BM
     }
 }
 
-void OLED_Init(I2C_Handle *i2c)
+void OLED_Init(void)
 {
-    g_oled_i2c = i2c;
+    I2C_Config i2c_cfg = {
+        .i2c          = I2C_OLED_INST,
+        .sclPort      = GPIO_I2C_OLED_SCL_PORT,
+        .sclPin       = GPIO_I2C_OLED_SCL_PIN,
+        .sclIomux     = GPIO_I2C_OLED_IOMUX_SCL,
+        .sclIomuxFunc = GPIO_I2C_OLED_IOMUX_SCL_FUNC,
+        .sdaPort      = GPIO_I2C_OLED_SDA_PORT,
+        .sdaPin       = GPIO_I2C_OLED_SDA_PIN,
+        .sdaIomux     = GPIO_I2C_OLED_IOMUX_SDA,
+        .sdaIomuxFunc = GPIO_I2C_OLED_IOMUX_SDA_FUNC,
+        .syscfgInit   = SYSCFG_DL_I2C_OLED_init,
+    };
+    g_oled_i2c = I2C_Init(&i2c_cfg);
 
-    if (DL_I2C_getSDAStatus(i2c->i2c) == DL_I2C_CONTROLLER_SDA_LOW)
+    if (DL_I2C_getSDAStatus(g_oled_i2c->i2c) == DL_I2C_CONTROLLER_SDA_LOW)
         OLED_SDAUnlock();
 
     delay_ms(200);

@@ -12,7 +12,11 @@
  * @param i2c 已注册的 I2C 句柄指针
  * @note 需先通过 I2C_Init 注册对应 I2C 实例，再传入句柄
  */
-void OLED_Init(I2C_Handle *i2c);
+/**
+ * @brief 自包含初始化 OLED（内部完成 I2C 注册 + SSD1306 初始化）
+ * @note  使用 SysConfig 生成的 I2C_OLED 配置，无需外部传入句柄
+ */
+void OLED_Init(void);
 
 /**
  * @brief 清屏（全黑）
@@ -66,8 +70,8 @@ void OLED_ShowChar(uint8_t x, uint8_t y, uint8_t chr, uint8_t sizey);
 
 /**
  * @brief 在指定位置显示字符串
- * @param x     列地址（0~127）
- * @param y     行地址（0~7）
+ * @param x     列地址（0-127）
+ * @param y     行地址（0-7）
  * @param str   待显示的字符串（以 \0 结尾）
  * @param sizey 字体高度：8 或 16
  */

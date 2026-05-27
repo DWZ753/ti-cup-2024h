@@ -3,31 +3,31 @@
 
 #include "deewaz_math.h"
 
-/** Mahony 互补滤波器句柄 */
-typedef struct
+/* Mahony 互补滤波器句柄 */
+typedef struct Mahony_t
 {
-    /* ---- 滤波器参数 ---- */
+    // 滤波器参数
     float Kp;  // 比例增益
     float Ki;  // 积分增益
     float dt;  // 采样周期 (s)
 
-    /* ---- 传感器原始数据 ---- */
+    // 传感器原始数据
     Axis3f gyro;  // 陀螺仪角速度 (rad/s)
     Axis3f acc;   // 加速度计 (m/s²)
 
-    /* ---- 积分误差 ---- */
+    // 积分误差
     float exInt, eyInt, ezInt;
 
-    /* ---- 四元数 ---- */
+    // 四元数
     float q0, q1, q2, q3;
 
-    /* ---- 旋转矩阵 ---- */
+    // 旋转矩阵
     float rMat[3][3];
 
-    /* ---- 欧拉角 (°) ---- */
+    // 欧拉角 (°)
     float pitch, roll, yaw;
 
-    /* ---- 内部方法（由 Mahony_Init 绑定） ---- */
+    // 内部方法（由 Mahony_Init 绑定）
     void (*init)(struct Mahony_t *mf, float Kp, float Ki, float dt);
     void (*input)(struct Mahony_t *mf, Axis3f gyro, Axis3f acc);
     void (*update)(struct Mahony_t *mf);
