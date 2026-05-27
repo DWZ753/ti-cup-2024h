@@ -23,7 +23,7 @@ int main(void)
     Key_Init();
     Servo_Init();
 
-    // 注册 I2C0（OLED 用）
+    // 注册 I2C0（OLED）
     // I2C_Config i2c_cfg = {
     //     .i2c          = I2C_OLED_INST,
     //     .sclPort      = GPIO_I2C_OLED_SCL_PORT,
@@ -48,7 +48,7 @@ int main(void)
     };
     uart_print = UART_Init(&uart_cfg);
 
-    // 注册 SPI (BMI088)
+    // 注册 SPI0 (BMI088)
     SPI_Config spi_cfg = { .spi = SPI_BMI088_INST };
     SPI_Handle *spi_bmi088 = SPI_Init(&spi_cfg);
 
@@ -56,8 +56,8 @@ int main(void)
     BMI088_Init(spi_bmi088);
 
     // 初始化 Mahony 滤波器
-    struct MAHONY_FILTER_t mahony;
-    mahony_init(&mahony, 15.0f, 0.002f, 0.002f);
+    Mahony_t mahony;
+    Mahony_Init(&mahony, 15.0f, 0.002f, 0.002f);
 
     float    accel[3] = {0}, gyro[3] = {0};
     Axis3f   gyro_axis, acc_axis;
@@ -78,9 +78,9 @@ int main(void)
             acc_axis.x  = accel[0]; acc_axis.y  = accel[1]; acc_axis.z  = accel[2];
             gyro_axis.x = gyro[0];  gyro_axis.y = gyro[1];  gyro_axis.z = gyro[2];
 
-            mahony_input(&mahony, gyro_axis, acc_axis);
-            mahony_update(&mahony);
-            mahony_output(&mahony);
+            Mahony_Input(&mahony, gyro_axis, acc_axis);
+            Mahony_Update(&mahony);
+            Mahony_Output(&mahony);
         }
 
         // 串口输出

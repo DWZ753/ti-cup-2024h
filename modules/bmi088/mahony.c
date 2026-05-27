@@ -1,6 +1,10 @@
 #include "mahony.h"
 
-void RotationMatrix_update(struct MAHONY_FILTER_t *mf)
+/**
+ * @brief  由四元数更新旋转矩阵（Mahony_Update 内部调用）
+ * @param  mf Mahony 滤波器句柄指针
+ */
+static void mahony_update_rotation_matrix(Mahony_t *mf)
 {
     float q1q1 = mf->q1 * mf->q1;
     float q2q2 = mf->q2 * mf->q2;
@@ -26,29 +30,24 @@ void RotationMatrix_update(struct MAHONY_FILTER_t *mf)
     mf->rMat[2][2] = 1.0f - 2.0f * q1q1 - 2.0f * q2q2;
 }
 
-void mahony_input(struct MAHONY_FILTER_t *mf, Axis3f gyro, Axis3f acc)
+void Mahony_Input(Mahony_t *mf, Axis3f gyro, Axis3f acc)
 {
     mf->gyro = gyro;
     mf->acc  = acc;
 }
 
-void mahony_update(struct MAHONY_FILTER_t *mf)
+void Mahony_Update(Mahony_t *mf)
 {
-    float normalise;
-    float ex, ey, ez;
-
-    // BMI088 陀螺仪输出已是 rad/s，无需 DEG2RAD 转换
-
     // 单位化加速度
-    normalise = invSqrt(mf->acc.x * mf->acc.x + mf->acc.y * mf->acc.y + mf->acc.z * mf->acc.z);
+    float normalise = invSqrt(mf->acc.x * mf->acc.x + mf->acc.y * mf->acc.y + mf->acc.z * mf->acc.z);
     mf->acc.x *= normalise;
     mf->acc.y *= normalise;
     mf->acc.z *= normalise;
 
     // 加速度与重力方向的叉积误差
-    ex = (mf->acc.y * mf->rMat[2][2] - mf->acc.z * mf->rMat[2][1]);
-    ey = (mf->acc.z * mf->rMat[2][0] - mf->acc.x * mf->rMat[2][2]);
-    ez = (mf->acc.x * mf->rMat[2][1] - mf->acc.y * mf->rMat[2][0]);
+    float ex = (mf->acc.y * mf->rMat[2][2] - mf->acc.z * mf->rMat[2][1]);
+    float ey = (mf->acc.z * mf->rMat[2][0] - mf->acc.x * mf->rMat[2][2]);
+    float ez = (mf->acc.x * mf->rMat[2][1] - mf->acc.y * mf->rMat[2][0]);
 
     // 积分误差累计
     mf->exInt += mf->Ki * ex * mf->dt;
@@ -78,17 +77,17 @@ void mahony_update(struct MAHONY_FILTER_t *mf)
     mf->q2 *= normalise;
     mf->q3 *= normalise;
 
-    mf->RotationMatrix_update(mf);
+    mf->update_rotation_matrix(mf);
 }
 
-void mahony_output(struct MAHONY_FILTER_t *mf)
+void Mahony_Output(Mahony_t *mf)
 {
     mf->pitch = -asinf(mf->rMat[2][0]) * RAD2DEG;
     mf->roll  = atan2f(mf->rMat[2][1], mf->rMat[2][2]) * RAD2DEG;
     mf->yaw   = atan2f(mf->rMat[1][0], mf->rMat[0][0]) * RAD2DEG;
 }
 
-void mahony_init(struct MAHONY_FILTER_t *mf, float Kp, float Ki, float dt)
+void Mahony_Init(Mahony_t *mf, float Kp, float Ki, float dt)
 {
     mf->Kp = Kp;
     mf->Ki = Ki;
@@ -105,8 +104,9 @@ void mahony_init(struct MAHONY_FILTER_t *mf, float Kp, float Ki, float dt)
     mf->rMat[1][0] = 0.0f; mf->rMat[1][1] = 1.0f; mf->rMat[1][2] = 0.0f;
     mf->rMat[2][0] = 0.0f; mf->rMat[2][1] = 0.0f; mf->rMat[2][2] = 1.0f;
 
-    mf->mahony_input          = mahony_input;
-    mf->mahony_update         = mahony_update;
-    mf->mahony_output         = mahony_output;
-    mf->RotationMatrix_update = RotationMatrix_update;
+    mf->init                   = Mahony_Init;
+    mf->input                  = Mahony_Input;
+    mf->update                 = Mahony_Update;
+    mf->output                 = Mahony_Output;
+    mf->update_rotation_matrix = mahony_update_rotation_matrix;
 }

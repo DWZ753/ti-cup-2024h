@@ -2,7 +2,10 @@
 
 static SPI_Handle *g_bmi088_spi;
 
-/** @brief 拉低 CS 选中设备: 0=加速度计, 1=陀螺仪 */
+/**
+ * @brief  拉低 CS 选中设备
+ * @param  cs_sel 0=加速度计, 1=陀螺仪
+ */
 static void bmi088_cs_select(uint8_t cs_sel)
 {
     if (cs_sel == 0) {
@@ -12,7 +15,10 @@ static void bmi088_cs_select(uint8_t cs_sel)
     }
 }
 
-/** @brief 拉高 CS 释放设备: 0=加速度计, 1=陀螺仪 */
+/**
+ * @brief  拉高 CS 释放设备
+ * @param  cs_sel 0=加速度计, 1=陀螺仪
+ */
 static void bmi088_cs_deselect(uint8_t cs_sel)
 {
     if (cs_sel == 0) {
@@ -22,7 +28,12 @@ static void bmi088_cs_deselect(uint8_t cs_sel)
     }
 }
 
-/** @brief 通过 SPI 向寄存器写入单字节数据 */
+/**
+ * @brief  通过 SPI 向寄存器写入单字节数据
+ * @param  reg    寄存器地址
+ * @param  data   写入数据
+ * @param  cs_sel 片选: 0=加速度计, 1=陀螺仪
+ */
 static void bmi088_write_reg(uint8_t reg, uint8_t data, uint8_t cs_sel)
 {
     bmi088_cs_select(cs_sel);
@@ -35,7 +46,13 @@ static void bmi088_write_reg(uint8_t reg, uint8_t data, uint8_t cs_sel)
     bmi088_cs_deselect(cs_sel);
 }
 
-/** @brief 通过 SPI 从寄存器连续读取多字节数据 */
+/**
+ * @brief  通过 SPI 从寄存器连续读取多字节数据
+ * @param  reg    寄存器地址
+ * @param  buf    输出缓冲区
+ * @param  len    读取字节数
+ * @param  cs_sel 片选: 0=加速度计, 1=陀螺仪
+ */
 static void bmi088_read_bytes(uint8_t reg, uint8_t *buf, uint8_t len, uint8_t cs_sel)
 {
     bmi088_cs_select(cs_sel);
@@ -72,7 +89,10 @@ uint8_t BMI088_ReadGyroID(void)
     return id;
 }
 
-/** @brief 加速度计初始化: 软复位后上电 */
+/**
+ * @brief  加速度计初始化：软复位 → 上电
+ * @return 0 成功
+ */
 static uint8_t bmi088_accel_init(void)
 {
     bmi088_write_reg(BMI088_REG_ACC_SOFTRESET, BMI088_SOFTRESET_VALUE, 0);
@@ -84,7 +104,10 @@ static uint8_t bmi088_accel_init(void)
     return 0;
 }
 
-/** @brief 陀螺仪初始化: 软复位 */
+/**
+ * @brief  陀螺仪初始化：软复位
+ * @return 0 成功
+ */
 static uint8_t bmi088_gyro_init(void)
 {
     bmi088_write_reg(BMI088_REG_GYR_SOFTRESET, BMI088_SOFTRESET_VALUE, 1);
