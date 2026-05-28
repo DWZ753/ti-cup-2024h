@@ -1,11 +1,11 @@
 #include "board.h"
-
-int state;
+#include "state_machine.h"
 
 int main(void)
 {
     SYSCFG_DL_init();
     Board_Init();
+    StateMachine_Init();
 
     uint32_t last_imu    = 0;
     uint32_t last_output = 0;

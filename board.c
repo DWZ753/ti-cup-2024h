@@ -1,6 +1,6 @@
 #include "board.h"
 
-/* ========== 板级静态资源 ========== */
+/* ========== 静态变量 ========== */
 
 static volatile uint32_t imu_ticks;
 static UART_Handle      *uart_print;
@@ -16,18 +16,18 @@ static void imu_tick_cb(void)
 
 void Board_Init(void)
 {
-    /* 定时器子系统 */
+    // 定时器
     PIT_Custom_Tick_Init();
     PIT_Custom_Tick_RegisterCallback(imu_tick_cb);
     PIT_Control_Tick_Init();
 
-    /* 执行器 */
+    // 执行器
     Buzzer_Init();
     TB6612_Init();
     Motor_Init();
     Servo_Init();
 
-    /* 输入 */
+    // 输入
     Key_Init();
 
     /* 通信 */
@@ -39,10 +39,10 @@ void Board_Init(void)
     };
     uart_print = UART_Init(&uart_cfg);
 
-    /* 传感器 */
+    // 传感器
     IMU_Init();
 
-    /* 显示 */
+    // 显示
     OLED_Init();
 }
 

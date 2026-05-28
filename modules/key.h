@@ -30,8 +30,17 @@ typedef struct {
     uint8_t flag;                   // 按键触发标志
 } Key_t;
 
+// 按键回调类型：参数 key_index 为触发的按键索引（0 - KEY_NUM-1）
+typedef void (*Key_Callback_t)(uint8_t key_index);
+
 // 外部按键数组声明
 extern Key_t keys[KEY_NUM];
+
+/**
+ * @brief 注册按键触发回调
+ * @param callback 回调函数指针，按键触发时被调用并传入按键索引
+ */
+void Key_RegisterCallback(Key_Callback_t callback);
 
 /**
  * @brief 按键模块初始化

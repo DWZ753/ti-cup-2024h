@@ -1,7 +1,7 @@
 #include "key.h"
 
-// 外部变量
-extern uint8_t state;
+// 按键触发回调
+static Key_Callback_t s_key_callback = NULL;
 
 // 按键硬件配置数组，移植后需要根据实际情况修改
 static const struct {
@@ -138,25 +138,25 @@ uint8_t Key_GetFlag(uint8_t key_index)
 }
 
 
+void Key_RegisterCallback(Key_Callback_t callback)
+{
+    s_key_callback = callback;
+}
+
 /**
  * @brief 按键定时处理回调函数
- * 
- * 该函数作为PIT定时器的Tick回调函数，周期性执行按键扫描和处理逻辑。
- * 
- * 当检测到按键触发时，更新全局state变量为按键编号（索引+1）
- * 
- * @note 此函数无参数和返回值，由定时器系统自动调用
- * @note state变量为外部全局变量，用于向其他模块传递按键事件信息
+ * @note 作为 PIT 定时器 Tick 回调周期性执行按键扫描，检测到触发时调用注册的回调
  */
 static void Key_TickHandler(void)
 {
     Key_Scan();
+    if (s_key_callback == NULL) return;
+
     for (int i = 0; i < KEY_NUM; i++)
     {
         if (Key_GetFlag(i))
         {
-            DL_GPIO_togglePins(GPIO_LEDs_PORT, GPIO_LEDs_GPIO_LED_PIN);
-            state = i + 1;
+            s_key_callback(i);
         }
     }
 }
