@@ -1,4 +1,3 @@
-#include "ti_msp_dl_config.h"
 #include "pit_custom_tick.h"
 
 #define MAX_PIT_CUSTOM_TASKS 8 // 最多同时支持8个任务

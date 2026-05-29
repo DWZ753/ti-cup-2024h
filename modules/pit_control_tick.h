@@ -1,6 +1,7 @@
 #ifndef PIT_CONTROL_TICK_H
 #define PIT_CONTROL_TICK_H
 
+#include "ti_msp_dl_config.h"
 #include <stdint.h>
 #include <stdbool.h>
 

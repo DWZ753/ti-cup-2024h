@@ -29,6 +29,7 @@ void Board_Init(void)
 
     // 输入
     Key_Init();
+    Grayscale_Init();
 
     /* 通信 */
     UART_Config uart_cfg = {

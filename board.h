@@ -10,6 +10,7 @@
 #include "tb6612.h"
 #include "motor.h"
 #include "key.h"
+#include "grayscale.h"
 #include "servo.h"
 #include "uart.h"
 #include "imu.h"
