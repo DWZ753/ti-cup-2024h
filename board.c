@@ -17,8 +17,8 @@ static void imu_tick_cb(void)
 void Board_Init(void)
 {
     // 定时器
-    PIT_Custom_Tick_Init();
-    PIT_Custom_Tick_RegisterCallback(imu_tick_cb);
+    PIT_Fast_Tick_Init();
+    PIT_Fast_Tick_RegisterCallback(imu_tick_cb);
     PIT_Control_Tick_Init();
 
     // 执行器

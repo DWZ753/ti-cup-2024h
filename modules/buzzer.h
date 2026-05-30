@@ -2,7 +2,7 @@
 #define __BUZZER_H__
 
 #include "ti_msp_dl_config.h"
-#include "pit_custom_tick.h"
+#include "pit_fast_tick.h"
 
 /**
  * @brief 启动蜂鸣器并设置鸣叫时长

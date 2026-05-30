@@ -49,5 +49,5 @@ static void Buzzer_TickHandler(void)
 
 void Buzzer_Init(void)
 {
-    PIT_Custom_Tick_RegisterCallback(Buzzer_TickHandler);
+    PIT_Fast_Tick_RegisterCallback(Buzzer_TickHandler);
 }

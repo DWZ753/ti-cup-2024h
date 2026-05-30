@@ -1,16 +1,16 @@
-#ifndef PIT_CUSTOM_TICK_H
-#define PIT_CUSTOM_TICK_H
+#ifndef PIT_FAST_TICK_H
+#define PIT_FAST_TICK_H
 
 #include "ti_msp_dl_config.h"
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef void (*PIT_Custom_Callback_t)(void);
+typedef void (*PIT_Fast_Callback_t)(void);
 
 /**
- * @brief 初始化 PIT 自定义滴答定时器，使能其中断
+ * @brief 初始化 PIT 快速滴答定时器，使能其中断
  */
-void PIT_Custom_Tick_Init(void);
+void PIT_Fast_Tick_Init(void);
 
 /**
  * @brief 注册 PIT 定时器回调函数
@@ -18,6 +18,6 @@ void PIT_Custom_Tick_Init(void);
  * @return true 注册成功，false 注册失败（任务已满或 callback 为空）
  * @note 最多可注册 8 个回调，PIT LOAD 中断触发时依次调用
  */
-bool PIT_Custom_Tick_RegisterCallback(PIT_Custom_Callback_t callback);
+bool PIT_Fast_Tick_RegisterCallback(PIT_Fast_Callback_t callback);
 
 #endif
