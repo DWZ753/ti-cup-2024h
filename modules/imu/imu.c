@@ -16,7 +16,7 @@ void IMU_Init(void)
 
     BMI088_Init(spi_bmi088);
 
-    Mahony_Init(&mahony, 15.0f, 0.002f, 0.002f);
+    Mahony_Init(&mahony, 18.0f, 0.002f, 0.002f);
 }
 
 void IMU_Update(void)

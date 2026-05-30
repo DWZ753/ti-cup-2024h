@@ -32,19 +32,47 @@ bsp/                  # 外设抽象层（SPI、I2C、UART、Delay）
 | `pit_fast_tick` | TIMG12 | 1ms | 轻量快速任务（IMU 滴答、蜂鸣器计时） |
 | `pit_control_tick` | TIMG0 | 20ms | 控制任务（电机速度闭环、按键扫描） |
 
-每个 tick 支持最多 8 个回调，ISR 中按注册顺序执行。详见 [modules/pit_tick.md](modules/pit_tick.md)。
+每个 tick 支持最多 8 个回调，ISR 中按注册顺序执行。详见 [PIT Tick 模块](modules/pit_tick/pit_tick.md)。
 
-## 功能模块
+## 📚 模块文档
 
-- **IMU** — BMI088 驱动 + Mahony 互补滤波器，输出四元数、欧拉角、加速度；支持零偏自校准
-- **Motor** — 双电机 PID 速度闭环，编码器测速反馈，前后台分离（ISR 计算、主循环调用）
-- **Tracking** — 8 路灰度传感器加权插值算法，输出归一化黑线位置 [−1.0, +1.0]
-- **State Machine** — 按键触发任务状态切换，回调注册机制
-- **OLED** — I2C SSD1306 驱动，128×64 显示
-- **PID** — 位置式 PID 控制器，积分/输出双限幅，支持在线调参与复位
-- **Key** — 按键状态机，消抖与长按/短按识别
-- **Servo** — PWM 占空比控制，支持角度映射
-- **Buzzer** — 定时自动停止的蜂鸣器
+### 系统级
+
+| 文档 | 说明 |
+|------|------|
+| [main.md](main.md) | 主程序入口，初始化流程与主循环调度 |
+| [board.md](board.md) | 板级初始化，系统滴答时钟，全局资源管理 |
+
+### BSP 层（外设抽象）
+
+| 模块 | 文档 | 说明 |
+|------|------|------|
+| Delay | [bsp/delay/delay.md](bsp/delay/delay.md) | 毫秒级阻塞延时 |
+| I2C | [bsp/i2c/i2c.md](bsp/i2c/i2c.md) | I2C 主机通信 + SDA 总线解锁 |
+| SPI | [bsp/spi/spi.md](bsp/spi/spi.md) | SPI 主机通信（全双工） |
+| UART | [bsp/uart/uart.md](bsp/uart/uart.md) | 串口通信（阻塞/DMA 发送 + 中断接收） |
+
+### Modules 层（功能模块）
+
+| 模块 | 文档 | 说明 |
+|------|------|------|
+| Buzzer | [modules/buzzer/buzzer.md](modules/buzzer/buzzer.md) | 有源蜂鸣器（定时自动停止） |
+| Grayscale | [modules/grayscale/grayscale.md](modules/grayscale/grayscale.md) | 8 路灰度传感器读取 |
+| IMU | [modules/imu/imu.md](modules/imu/imu.md) | BMI088 + Mahony 姿态解算 |
+| Key | [modules/key/key.md](modules/key/key.md) | 按键输入（FSM 消抖 + 回调） |
+| Motor | [modules/motor/motor.md](modules/motor/motor.md) | 双电机控制（速度接口 + 编码器测速） |
+| OLED | [modules/oled/oled.md](modules/oled/oled.md) | SSD1306 OLED 显示（字符/汉字/图片） |
+| PIT Tick | [modules/pit_tick/pit_tick.md](modules/pit_tick/pit_tick.md) | 1ms/20ms 定时器回调系统 |
+| Servo | [modules/servo/servo.md](modules/servo/servo.md) | 舵机 PWM 控制 |
+| TB6612 | [modules/tb6612/tb6612.md](modules/tb6612/tb6612.md) | TB6612 双 H 桥底层驱动 |
+
+### Application 层（控制算法）
+
+| 模块 | 文档 | 说明 |
+|------|------|------|
+| PID | [application/pid/pid.md](application/pid/pid.md) | 位置式 PID 控制器（积分/输出双限幅） |
+| State Machine | [application/state_machine/state_machine.md](application/state_machine/state_machine.md) | 按键触发任务状态切换 |
+| Tracking | [application/tracking/tracking.md](application/tracking/tracking.md) | 8 路灰度加权插值循迹算法 |
 
 ## 构建与烧录
 
@@ -78,6 +106,7 @@ bsp/                  # 外设抽象层（SPI、I2C、UART、Delay）
 
 ## 已知问题
 
-- **左电机（Motor 1）测速异常**：编码器读数不稳定，PID 闭环暂不可用，见 `modules/motor.c` 中的 `@todo`
-- **`TB6612_LimitPWM` 无符号比较**：`uint32_t period_count < 0` 为永假条件，属于死代码
-- **主循环 `state` 变量未使用**：`main.c` 中 `state` 被 Key 回调写入，但主循环未读取
+- **左电机（Motor 1）测速异常**：编码器读数不稳定，PID 闭环暂不可用。详见 [Motor 模块文档](modules/motor/motor.md)
+- **主循环 `state` 变量未使用**：`main.c` 中 `state` 被 Key 回调写入，但主循环未读取。建议使用 [State Machine 模块](application/state_machine/state_machine.md) 替代
+- **Yaw 漂移**：Mahony 滤波器仅用加速度计修正 Roll/Pitch，Yaw 角随时间漂移（无磁力计）
+- **Cortex-M0+ 无硬件 FPU**：浮点运算为软件模拟，IMU_Update 含大量浮点运算，注意控制频率

@@ -40,5 +40,7 @@ int main(void)
                         roll, pitch, yaw,
                         accel[0], accel[1], accel[2]);
         }
+
+
     }
 }

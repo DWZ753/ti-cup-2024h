@@ -13,10 +13,6 @@ uint32_t TB6612_LimitPWM(uint32_t period_count)
     {
         period_count = TB6612_PWM_PERIOD_COUNT;
     }
-    if (period_count < 0)
-    {
-        period_count = 0;
-    }
 
     return period_count;
 }
