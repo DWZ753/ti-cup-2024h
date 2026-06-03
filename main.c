@@ -1,5 +1,9 @@
 #include "board.h"
 #include "state_machine.h"
+#include "pid.h"
+
+/* ========== PID 控制周期（ms），需和测速窗口对齐 ========== */
+#define PID_DT_MS  60
 
 int main(void)
 {
@@ -7,40 +11,50 @@ int main(void)
     Board_Init();
     StateMachine_Init();
 
-    uint32_t last_imu    = 0;
+    DL_Timer_setCaptureCompareValue(SERVO_PWM_INST, 3000, SERVO_PWM_CHANNEL);
+
+    /* ---- PID 初始化 ---- */
+    PID_Controller speed_pid;
+    PID_Init(&speed_pid, 2.0f, 1.2f, 0.0f, 500.0f, MOTOR_MAX_SPEED_MM_S);
+    PID_SetTarget(&speed_pid, 1500.0f);  // 目标速度 mm/s，按需修改
+
+    uint32_t last_pid    = 0;
     uint32_t last_output = 0;
+
 
     while (1)
     {
         uint32_t now = Board_GetTickMs();
 
-        // 每 2ms 执行一次 IMU 采样 + 姿态解算
-        if (now - last_imu >= 2)
+        /* ---- PID 速度控制（每 PID_DT_MS 一次） ---- */
+        if (now - last_pid >= PID_DT_MS)
         {
-            last_imu = now;
-            IMU_Update();
+            last_pid = now;
+
+            float speed1 = Motor_GetFilteredSpeed1();
+            float speed2 = Motor_GetFilteredSpeed2();
+            float avg_speed = (speed1 + speed2) * 0.5f;
+
+            float output = PID_Compute(&speed_pid, avg_speed);
+            Motor_SetSpeed(output);
         }
 
-        // 每 10ms 输出一次姿态数据
-        if (now - last_output >= 10)
+        /* ---- UART 遥测（每 100ms 输出，方便调参） ---- */
+        if (now - last_output >= 100)
         {
             last_output = now;
 
-            float q0, q1, q2, q3;
-            float roll, pitch, yaw;
-            float accel[3];
-            IMU_GetQuaternion(&q0, &q1, &q2, &q3);
-            IMU_GetEuler(&roll, &pitch, &yaw);
-            IMU_GetAccel(accel);
-
-            UART_Handle *uart = Board_GetUART();
-            UART_Printf(uart,
-                        "%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
-                        q0, q1, q2, q3,
-                        roll, pitch, yaw,
-                        accel[0], accel[1], accel[2]);
+            // FireWater: prefix:ch0,ch1,...\r\n
+            // ch: Target, AvgSpeed, Output, Speed1, Speed2, RPM1, RPM2
+            UART_Printf(Board_GetUART(),
+                "%.0f, %.0f, %.0f, %.0f, %.0f, %.0f, %.0f\n",
+                speed_pid.target,
+                (Motor_GetFilteredSpeed1() + Motor_GetFilteredSpeed2()) * 0.5f,
+                speed_pid.output,
+                Motor_GetFilteredSpeed1(),
+                Motor_GetFilteredSpeed2(),
+                Motor_GetEncoder1RPM(),
+                Motor_GetEncoder2RPM());
         }
-
-
     }
 }

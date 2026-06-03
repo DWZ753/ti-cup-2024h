@@ -1,6 +1,5 @@
 /* 本模块在使用tb6612电机驱动芯片时不需要修改
  * @todo 添加使用其他电机驱动芯片的接口
- * @todo 左电机（即 motor1）的测速有bug，等待修复
  */
 #include "motor.h"
 
@@ -13,6 +12,20 @@ static volatile float   g_encoder1_rpm;
 static volatile float   g_encoder2_rpm;
 static volatile float   g_encoder1_speed;
 static volatile float   g_encoder2_speed;
+
+static volatile float   g_encoder1_rpm_f;    // 滤波后 RPM
+static volatile float   g_encoder2_rpm_f;
+static volatile float   g_encoder1_speed_f;  // 滤波后线速度 mm/s
+static volatile float   g_encoder2_speed_f;
+
+/* ---------- 窗口累积器（TickHandler 内部使用） ---------- */
+
+static int32_t g_enc1_last;          // 上一次脉冲读数
+static int32_t g_enc2_last;
+static int32_t g_enc1_diff_sum;      // 窗口内脉冲差值累加
+static int32_t g_enc2_diff_sum;
+static uint8_t g_tick_count;         // 当前窗口已累积的 tick 数
+static bool    g_first_window;       // 首个窗口标志（EMA 初始化用）
 
 void Motor_Init(void)
 {
@@ -40,12 +53,12 @@ void Motor_SetSpeed(float speed_mm_s)
     if (speed_mm_s >= 0.0f)
     {
         TB6612_A_Forward(duty);
-        TB6612_B_Forward(duty);
+        TB6612_B_Backward(duty);
     }
     else
     {
         TB6612_A_Backward(duty);
-        TB6612_B_Backward(duty);
+        TB6612_B_Forward(duty);
     }
 }
 
@@ -61,6 +74,15 @@ void Motor_Stop(void)
     TB6612_B_Stop();
 }
 
+/**
+ * @brief 编码器中断服务函数
+ * 
+ * 该函数处理两个电机编码器的A相脉冲中断，通过检测B相信号电平判断旋转方向，
+ * 并更新对应的脉冲计数器。采用正交解码方式实现电机转速和方向的测量。
+ * 
+ * @note 电机1和电机2的计数方向定义相反（电机1：B=0时递减，B=1时递增；
+ *       电机2：B=0时递增，B=1时递减）
+ */
 static void encoder_isr(void)
 {
     if (DL_GPIO_getEnabledInterruptStatus(MOTOR_ENCODER1_OUT_A_PORT, MOTOR_ENCODER1_OUT_A_PIN))
@@ -127,23 +149,59 @@ int32_t Motor_GetEncoder2Pulse(void)
 
 void Motor_TickHandler(void)
 {
-    static int32_t last1, last2;
-    int32_t cur1, cur2;
-    int32_t diff1, diff2;
+    int32_t cur1 = g_encoder1_pulse;
+    int32_t cur2 = g_encoder2_pulse;
 
-    cur1  = g_encoder1_pulse;
-    cur2  = g_encoder2_pulse;
+    int32_t diff1 = cur1 - g_enc1_last;
+    int32_t diff2 = cur2 - g_enc2_last;
 
-    diff1 = cur1 - last1;
-    diff2 = cur2 - last2;
+    g_enc1_last = cur1;
+    g_enc2_last = cur2;
 
-    last1 = cur1;
-    last2 = cur2;
+    /* ---- 累加本 tick 的脉冲差 ---- */
+    g_enc1_diff_sum += diff1;
+    g_enc2_diff_sum += diff2;
+    g_tick_count++;
 
-    g_encoder1_rpm   = (float)diff1 * 100.0f / 11.0f;
-    g_encoder2_rpm   = (float)diff2 * 100.0f / 11.0f;
-    g_encoder1_speed = g_encoder1_rpm * WHEEL_CIRCUMFERENCE_MM / 60.0f;
-    g_encoder2_speed = g_encoder2_rpm * WHEEL_CIRCUMFERENCE_MM / 60.0f;
+    /* ---- 窗口期满：计算速度 + EMA 滤波 ---- */
+    if (g_tick_count < MOTOR_SPEED_WINDOW_TICKS)
+        return;
+
+    // 从窗口内累计脉冲差计算原始 RPM
+    // RPM = total_diff / 330 * (60 / (N * 0.02)) = total_diff * 100 / (11 * N)
+    float raw_rpm1 = (float)g_enc1_diff_sum * 100.0f / 11.0f
+                     / (float)MOTOR_SPEED_WINDOW_TICKS;
+    float raw_rpm2 = (float)g_enc2_diff_sum * 100.0f / 11.0f
+                     / (float)MOTOR_SPEED_WINDOW_TICKS;
+
+    g_encoder1_rpm   = raw_rpm1;
+    g_encoder2_rpm   = raw_rpm2;
+    g_encoder1_speed = raw_rpm1 * WHEEL_CIRCUMFERENCE_MM / 60.0f;
+    g_encoder2_speed = raw_rpm2 * WHEEL_CIRCUMFERENCE_MM / 60.0f;
+
+    /* ---- EMA 滤波 ---- */
+    if (g_first_window)
+    {
+        // 首个窗口：直接赋值，跳过过渡过程
+        g_encoder1_rpm_f   = raw_rpm1;
+        g_encoder2_rpm_f   = raw_rpm2;
+        g_encoder1_speed_f = g_encoder1_speed;
+        g_encoder2_speed_f = g_encoder2_speed;
+        g_first_window     = false;
+    }
+    else
+    {
+        // new = old + (raw - old) * GAIN
+        g_encoder1_rpm_f   += (raw_rpm1 - g_encoder1_rpm_f)   * MOTOR_SPEED_EMA_GAIN;
+        g_encoder2_rpm_f   += (raw_rpm2 - g_encoder2_rpm_f)   * MOTOR_SPEED_EMA_GAIN;
+        g_encoder1_speed_f += (g_encoder1_speed - g_encoder1_speed_f) * MOTOR_SPEED_EMA_GAIN;
+        g_encoder2_speed_f += (g_encoder2_speed - g_encoder2_speed_f) * MOTOR_SPEED_EMA_GAIN;
+    }
+
+    /* ---- 重置窗口 ---- */
+    g_enc1_diff_sum = 0;
+    g_enc2_diff_sum = 0;
+    g_tick_count    = 0;
 }
 
 void Motor_ResetEncoder(void)
@@ -154,4 +212,38 @@ void Motor_ResetEncoder(void)
     g_encoder2_rpm   = 0.0f;
     g_encoder1_speed = 0.0f;
     g_encoder2_speed = 0.0f;
+
+    g_encoder1_rpm_f   = 0.0f;
+    g_encoder2_rpm_f   = 0.0f;
+    g_encoder1_speed_f = 0.0f;
+    g_encoder2_speed_f = 0.0f;
+
+    g_enc1_diff_sum  = 0;
+    g_enc2_diff_sum  = 0;
+    g_enc1_last      = 0;
+    g_enc2_last      = 0;
+    g_tick_count     = 0;
+    g_first_window   = true;
+}
+
+/* ========== 滤波值 Getter ========== */
+
+float Motor_GetFilteredSpeed1(void)
+{
+    return g_encoder1_speed_f;
+}
+
+float Motor_GetFilteredSpeed2(void)
+{
+    return g_encoder2_speed_f;
+}
+
+float Motor_GetFilteredRPM1(void)
+{
+    return g_encoder1_rpm_f;
+}
+
+float Motor_GetFilteredRPM2(void)
+{
+    return g_encoder2_rpm_f;
 }

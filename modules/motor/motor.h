@@ -40,6 +40,23 @@
 // 最大线速度 mm/s = 最高转速 × 周长 / 60
 #define MOTOR_MAX_SPEED_MM_S                (MOTOR_MAX_RPM / 60.0f * WHEEL_CIRCUMFERENCE_MM)
 
+/* ========== 测速滤波参数（改这里调响应速度） ========== */
+
+// 测速窗口：多少个控制 Tick（每个 20ms）累加一次速度
+// 增大 → 原始精度更高、跳动更小，但测量延迟增大
+//   1 = 20ms（原始行为）
+//   3 = 60ms（推荐值，30 RPM 时分辨率约 3 RPM）
+//   5 = 100ms（极低速时更稳，但 PID 响应慢）
+#define MOTOR_SPEED_WINDOW_TICKS             3
+
+// EMA 滤波增益：new_filtered = old + (raw - old) * GAIN
+// 取值 0.0~1.0，越小越平滑但滞后越大
+//   1.00f = 无滤波（原始值）
+//   0.50f = 轻度平滑（滞后 ~2 个窗口周期）
+//   0.25f = 中度平滑（滞后 ~4 个窗口周期，推荐值）
+//   0.10f = 重度平滑（低速循迹场景）
+#define MOTOR_SPEED_EMA_GAIN                 0.25f
+
 /**
  * @brief 电机初始化，将电机置于停止状态
  */
@@ -74,16 +91,44 @@ float Motor_GetEncoder1RPM(void);
 float Motor_GetEncoder2RPM(void);
 
 /**
- * @brief 获取电机1当前线速度
+ * @brief 获取电机1当前线速度（原始值，未滤波）
  * @return 线速度（mm/s）
  */
 float Motor_GetEncoder1Speed(void);
 
 /**
- * @brief 获取电机2当前线速度
+ * @brief 获取电机2当前线速度（原始值，未滤波）
  * @return 线速度（mm/s）
  */
 float Motor_GetEncoder2Speed(void);
+
+/**
+ * @brief 获取电机1滤波后线速度
+ *
+ * 该值经过窗口累积平均 + EMA 低通滤波，已消除编码器量化跳动，
+ * 适合直接喂给 PID 控制器。
+ *
+ * @return 滤波后线速度（mm/s），每 MOTOR_SPEED_WINDOW_TICKS × 20ms 更新一次
+ */
+float Motor_GetFilteredSpeed1(void);
+
+/**
+ * @brief 获取电机2滤波后线速度
+ * @return 滤波后线速度（mm/s）
+ */
+float Motor_GetFilteredSpeed2(void);
+
+/**
+ * @brief 获取电机1滤波后转速
+ * @return 滤波后转速（RPM）
+ */
+float Motor_GetFilteredRPM1(void);
+
+/**
+ * @brief 获取电机2滤波后转速
+ * @return 滤波后转速（RPM）
+ */
+float Motor_GetFilteredRPM2(void);
 
 /**
  * @brief 获取电机1编码器原始脉冲计数
@@ -98,13 +143,25 @@ int32_t Motor_GetEncoder1Pulse(void);
 int32_t Motor_GetEncoder2Pulse(void);
 
 /**
- * @brief 编码器转速更新（在 PIT 控制中断中调用）
- * @note 根据两次调用间的脉冲差值计算 RPM 和线速度，调用周期 20ms
+ * @brief 编码器转速更新（PIT 控制中断回调，每 20ms 调用一次）
+ *
+ * 实现"窗口累积 + EMA 滤波"两阶段测速：
+ * - 阶段一（每 tick）：读取脉冲 → 计算差值 → 累加至窗口缓冲区
+ * - 阶段二（窗口期满）：从累计差计算原始 RPM → EMA 低通滤波 → 输出滤波值
+ *
+ * 测速精度和平滑速度分别由 MOTOR_SPEED_WINDOW_TICKS 和
+ * MOTOR_SPEED_EMA_GAIN 控制，均在 motor.h 顶部定义。
+ *
+ * @note PID 建议使用 Motor_GetFilteredSpeed() 而非原始的 Motor_GetEncoderSpeed()
  */
 void Motor_TickHandler(void);
 
 /**
- * @brief 清零编码器脉冲计数
+ * @brief 清零编码器脉冲、速度及滤波状态
+ *
+ * 复位范围：原始脉冲、原始 RPM/速度、滤波后 RPM/速度、窗口累积器。
+ *
+ * @note Motor_Init() 内部调用；急停/重启动时可手动调用以清除历史
  */
 void Motor_ResetEncoder(void);
 
