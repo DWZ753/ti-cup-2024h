@@ -5,6 +5,7 @@
 双电机控制模块，封装 TB6612 驱动 + 编码器测速，提供**统一的线速度接口**。支持：
 - 以 mm/s 为单位设定目标速度（正值前进、负值后退）
 - 编码器实时测速（RPM + 线速度）
+- **窗口累积 + EMA 低通滤波**两阶段测速，消除编码器量化跳动
 - 自动死区处理（低于最小占空比时自动制动）
 - 通过 PIT Control Tick（20ms）周期性更新速度
 
@@ -45,6 +46,20 @@
 | `MOTOR_MIN_DUTY` | 100 | 最低启动 PWM 占空比（低于此值电机不转） |
 | `MOTOR_MAX_PWM_DUTY` | PWM_PERIOD_COUNT - 1 | 最大 PWM 占空比 |
 
+### 测速滤波参数
+
+两阶段滤波由 `Motor_TickHandler` 内部实现，参数在 `motor.h` 顶部定义：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `MOTOR_SPEED_WINDOW_TICKS` | 3 | 测速窗口（Tick 数）。3 → 60ms，增大可提高精度但增加延迟 |
+| `MOTOR_SPEED_EMA_GAIN` | 0.25f | EMA 滤波增益。1.0 = 无滤波，0.25 = 中度平滑，0.10 = 重度平滑 |
+
+**阶段一（窗口累积）**：每个 20ms tick 读取编码器脉冲差值并累加，窗口期满后计算原始 RPM。
+**阶段二（EMA 低通滤波）**：`new = old + (raw - old) × GAIN`，输出连续平滑的速度值。
+
+滤波后的速度通过 `Motor_GetFilteredSpeedX()` / `Motor_GetFilteredRPMX()` 获取，适合直接喂给 PID 控制器。
+
 ## API
 
 ### 初始化与控制
@@ -81,10 +96,14 @@
 
 | 函数 | 返回值 | 说明 |
 |------|--------|------|
-| `Motor_GetEncoder1RPM()` | `float` | 电机 1 转速 (RPM) |
-| `Motor_GetEncoder2RPM()` | `float` | 电机 2 转速 (RPM) |
-| `Motor_GetEncoder1Speed()` | `float` | 电机 1 线速度 (mm/s) |
-| `Motor_GetEncoder2Speed()` | `float` | 电机 2 线速度 (mm/s) |
+| `Motor_GetEncoder1RPM()` | `float` | 电机 1 原始转速 (RPM)，每窗口更新一次 |
+| `Motor_GetEncoder2RPM()` | `float` | 电机 2 原始转速 (RPM) |
+| `Motor_GetEncoder1Speed()` | `float` | 电机 1 原始线速度 (mm/s) |
+| `Motor_GetEncoder2Speed()` | `float` | 电机 2 原始线速度 (mm/s) |
+| `Motor_GetFilteredRPM1()` | `float` | 电机 1 滤波后转速 (RPM)，EMA 平滑 |
+| `Motor_GetFilteredRPM2()` | `float` | 电机 2 滤波后转速 (RPM) |
+| `Motor_GetFilteredSpeed1()` | `float` | 电机 1 滤波后线速度 (mm/s)，**推荐 PID 使用** |
+| `Motor_GetFilteredSpeed2()` | `float` | 电机 2 滤波后线速度 (mm/s) |
 | `Motor_GetEncoder1Pulse()` | `int32_t` | 电机 1 编码器脉冲累计值 |
 | `Motor_GetEncoder2Pulse()` | `int32_t` | 电机 2 编码器脉冲累计值 |
 
@@ -92,17 +111,25 @@
 
 #### `void Motor_TickHandler(void)`
 
-编码器转速更新函数（由 PIT Control Tick 中断调用，20ms 周期）。
+编码器转速更新函数（由 PIT Control Tick 中断调用，20ms 周期），实现两阶段测速：
 
-速度计算公式：
+**阶段一 — 窗口累积（每 `MOTOR_SPEED_WINDOW_TICKS` 次执行一次）**：
 ```
-RPM = 脉冲差值 × 100 / 11      （20ms 周期 → 50Hz → 乘 100 换算为每分钟）
-Speed = RPM × 轮子周长 / 60    （mm/s）
+total_diff  = 窗口内各 tick 脉冲差值累加
+raw_rpm     = total_diff × 100 / (11 × WINDOW_TICKS)
+raw_speed   = raw_rpm × 轮子周长 / 60
 ```
+
+**阶段二 — EMA 低通滤波**（窗口期满时执行）：
+```
+filtered = old_filtered + (raw - old_filtered) × MOTOR_SPEED_EMA_GAIN
+```
+
+首个窗口直接赋值跳过过渡过程，后续窗口逐步收敛。
 
 #### `void Motor_ResetEncoder(void)`
 
-清零编码器脉冲计数和速度值。
+清零编码器脉冲计数、原始/滤波速度值、窗口累积器及 EMA 状态。`Motor_Init()` 内部调用，急停/重启时可手动调用。
 
 ## 依赖
 
@@ -137,22 +164,21 @@ Motor_Stop();
 
 ## 速度环 PID 控制
 
-电机模块提供的 `Motor_GetEncoderXSpeed()` 可作为 [PID 控制器](../../application/pid/pid.md) 的反馈输入：
+电机模块提供的 `Motor_GetFilteredSpeedX()` 已经过 EMA 平滑，可直接作为 [PID 控制器](../../application/pid/pid.md) 的反馈输入：
 
 ```c
 PID_Controller speed_pid;
 
 // 初始化 PID
-PID_Init(&speed_pid, 0.5, 0.1, 0.01, 500.0, 1000.0);
-PID_SetTarget(&speed_pid, 500.0);  // 目标 500mm/s
+PID_Init(&speed_pid, 2.0, 1.2, 0.0, 500.0, MOTOR_MAX_SPEED_MM_S);
+PID_SetTarget(&speed_pid, 1500.0);  // 目标 1500mm/s
 
-// 在控制循环中
-float current_speed = Motor_GetEncoder1Speed();
-float output = PID_Compute(&speed_pid, current_speed);
-Motor_SetSpeed(output);  // 但注意：目前 Motor_SetSpeed 同时控制两路电机
+// 在控制循环中（每 PID_DT_MS 毫秒）
+float avg_speed = (Motor_GetFilteredSpeed1() + Motor_GetFilteredSpeed2()) * 0.5f;
+float output = PID_Compute(&speed_pid, avg_speed);
+Motor_SetSpeed(output);
 ```
 
-## 已知问题
+## 架构说明
 
-- **⚠️ 左电机（Motor 1）测速有 Bug**：编码器读数不稳定，等待修复。当前两路电机使用统一的 `Motor_SetSpeed()` 开环控制。
-- **无独立控制**：`Motor_SetSpeed()` 同时设置两路电机相同速度，差速转向需独立调用 `TB6612_A_xxx()` 和 `TB6612_B_xxx()`。
+小车采用**阿克曼转向**，由舵机控制前轮转角，`Motor_SetSpeed()` 统一驱动后轮两路电机。无需差速控制。

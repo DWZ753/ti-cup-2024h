@@ -9,9 +9,9 @@
 #define SERVO_PWM_CLK_FREQ          PWM_SERVO_INST_CLK_FREQ     // PWM定时器时钟频率(Hz)
 
 /* ========== 舵机参数宏（更换舵机型号时修改此部分） ========== */
-#define SERVO_PULSE_MIN_US          2000    // 物理60°对应脉宽(us)，实测定标值
-#define SERVO_PULSE_MAX_US          4000    // 物理120°对应脉宽(us)，留余量避免机械限位
-#define SERVO_PULSE_CENTER_US       3000    // 物理90°对应脉宽(us)，实测定标值
+#define SERVO_PULSE_MIN_US          1000    // -100 对应脉宽(us)
+#define SERVO_PULSE_MAX_US          2000    // +100 对应脉宽(us)
+#define SERVO_PULSE_CENTER_US       1500    //    0 对应脉宽(us)，中心位置
 
 /**
  * @brief 舵机初始化，启动 PWM 输出并将舵机复位到中心位置

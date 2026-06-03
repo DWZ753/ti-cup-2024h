@@ -25,7 +25,7 @@ void Board_Init(void)
     Buzzer_Init();
     TB6612_Init();
     Motor_Init();
-    // Servo_Init();
+    Servo_Init();
 
     // 输入
     Key_Init();

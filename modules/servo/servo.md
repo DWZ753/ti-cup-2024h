@@ -28,17 +28,12 @@
 ### 舵机参数宏（更换舵机型号时修改）
 
 ```c
-#define SERVO_PULSE_MIN_US          2000    // 最小角度对应脉宽 (μs)
-#define SERVO_PULSE_MAX_US          4000    // 最大角度对应脉宽 (μs)
-#define SERVO_PULSE_CENTER_US       3000    // 中心位置对应脉宽 (μs)
+#define SERVO_PULSE_MIN_US          1000    // -100 对应脉宽 (μs)
+#define SERVO_PULSE_MAX_US          2000    // +100 对应脉宽 (μs)
+#define SERVO_PULSE_CENTER_US       1500    //    0 对应脉宽 (μs)，中心位置
 ```
 
-这三个参数由**实际标定**得到：
-- `SERVO_PULSE_MIN_US`：物理最小角度（约 60°）对应的脉宽
-- `SERVO_PULSE_MAX_US`：物理最大角度（约 120°）对应的脉宽
-- `SERVO_PULSE_CENTER_US`：物理中心（约 90°）对应的脉宽
-
-> 最大值和最小值留有安全余量，避免撞到机械限位。
+这三个参数由**实际标定**得到，对应控制值 `-100 / 0 / +100` 的物理脉宽。最大值和最小值应留有安全余量，避免撞到机械限位。
 
 ## 控制值映射
 
@@ -50,10 +45,19 @@
 控制值 = -100 → 脉宽 = MIN_US（最小角度）
 ```
 
-映射公式：
+映射分两步完成：先计算微秒脉宽，再转换为定时器比较值。
+
+**第一步：控制值 → 微秒脉宽**
 ```
-duty = CENTER_US + (value * (MAX_US - MIN_US) / 200)
+pulse_us = CENTER_US + (value * (MAX_US - MIN_US) / 200)
 ```
+
+**第二步：微秒脉宽 → 定时器比较值**
+```
+compare_value = pulse_us * (SERVO_PWM_CLK_FREQ / 1,000,000)
+```
+
+`SERVO_PWM_CLK_FREQ / 1,000,000` 是编译期常量，表示每微秒对应的定时器计数值。当 PWM 时钟频率改变时，SysConfig 自动更新 `SERVO_PWM_CLK_FREQ` 宏，公式无需手动修改。
 
 ## API
 
@@ -110,6 +114,6 @@ Servo_SetValue(100);
 
 ## 更换舵机/移植注意事项
 
-1. **修改舵机参数**：使用示波器或逻辑分析仪测量舵机的脉宽范围，更新 `SERVO_PULSE_MIN_US`、`SERVO_PULSE_MAX_US`、`SERVO_PULSE_CENTER_US`
+1. **标定舵机脉宽**：将舵机安装在车上，测试 `-100 / 0 / +100` 三个位置对应的比较值，反推微秒值后更新 `SERVO_PULSE_MIN_US`、`SERVO_PULSE_MAX_US`、`SERVO_PULSE_CENTER_US`
 2. **修改 PWM 通道**：在 SysConfig 中重新配置 PWM 输出引脚后，更新 `SERVO_PWM_INST` 和 `SERVO_PWM_CHANNEL`
-3. **确认 PWM 频率**：标准舵机使用 50Hz（周期 20ms），PWM 时钟频率通过 `SERVO_PWM_CLK_FREQ` 宏参与内部计算
+3. **PWM 时钟频率**：`SERVO_PWM_CLK_FREQ` 由 SysConfig 自动生成，修改 clock divider / prescale 后无需手动更新。当前配置为 250Hz（周期 4ms），若更换为模拟舵机需在 SysConfig 中将 `timerCount` 调大至 50Hz（周期 20ms）

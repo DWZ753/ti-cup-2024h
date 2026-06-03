@@ -11,8 +11,6 @@ int main(void)
     Board_Init();
     StateMachine_Init();
 
-    DL_Timer_setCaptureCompareValue(SERVO_PWM_INST, 3000, SERVO_PWM_CHANNEL);
-
     /* ---- PID 初始化 ---- */
     PID_Controller speed_pid;
     PID_Init(&speed_pid, 2.0f, 1.2f, 0.0f, 500.0f, MOTOR_MAX_SPEED_MM_S);
@@ -39,13 +37,11 @@ int main(void)
             Motor_SetSpeed(output);
         }
 
-        /* ---- UART 遥测（每 100ms 输出，方便调参） ---- */
+        /* ---- UART 遥测（每 100ms 输出） ---- */
         if (now - last_output >= 100)
         {
             last_output = now;
 
-            // FireWater: prefix:ch0,ch1,...\r\n
-            // ch: Target, AvgSpeed, Output, Speed1, Speed2, RPM1, RPM2
             UART_Printf(Board_GetUART(),
                 "%.0f, %.0f, %.0f, %.0f, %.0f, %.0f, %.0f\n",
                 speed_pid.target,
