@@ -6,6 +6,9 @@
 #include "bmi088.h"
 #include "mahony.h"
 
+/** Mahony 滤波器采样周期 (s)，需匹配 IMU_Update() 的调用间隔 */
+#define IMU_MAHONY_DT  0.01f
+
 /**
  * @brief 初始化 IMU 子系统（SPI → BMI088 → Mahony）
  * @note  内部完成 SPI 注册、BMI088 软复位、Mahony 滤波器配置
