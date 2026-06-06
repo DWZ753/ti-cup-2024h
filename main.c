@@ -12,8 +12,9 @@
 #define LINE_LOST_DEBOUNCE     5
 
 /* ========== 固定速度（开环） ========== */
-#define SPEED_ARC          200.0f
+#define SPEED_ARC          1000.0f
 #define SPEED_STRAIGHT     450.0f
+#define ARC_DIFF_GAIN        7.3f   // 差速增益：servo × gain = 两轮速度差 (mm/s)
 
 /* ========== 循迹 PID 参数 ========== */
 // position ∈ [-1, 1]，OUT_LIMIT=40 对应满偏 40%
@@ -93,7 +94,14 @@ int main(void)
         {
             /* 循迹模式 */
             Angle_Enable(false);
-            Motor_SetSpeed(SPEED_ARC);
+
+            /* 差速控制：舵机偏向越大，两轮速度差越大 */
+            {
+                float diff = tracking_last_servo * ARC_DIFF_GAIN;
+                float left_speed  = SPEED_ARC + diff;
+                float right_speed = SPEED_ARC - diff;
+                Motor_SetSpeedLR(left_speed, right_speed);
+            }
 
             /* 刚切入弧线段时复位 PID */
             if (last_seg != SEG_ARC)

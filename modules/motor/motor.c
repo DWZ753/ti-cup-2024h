@@ -62,6 +62,35 @@ void Motor_SetSpeed(float speed_mm_s)
     }
 }
 
+void Motor_SetSpeedLR(float left_mm_s, float right_mm_s)
+{
+    /* ---- 左轮（A 通道） ---- */
+    float abs_left = (left_mm_s >= 0.0f) ? left_mm_s : -left_mm_s;
+    uint32_t duty_left = (uint32_t)(abs_left / MOTOR_MAX_SPEED_MM_S * MOTOR_MAX_PWM_DUTY);
+    if (duty_left > MOTOR_MAX_PWM_DUTY)
+        duty_left = MOTOR_MAX_PWM_DUTY;
+
+    if (duty_left < MOTOR_MIN_DUTY)
+        TB6612_A_Brake();
+    else if (left_mm_s >= 0.0f)
+        TB6612_A_Forward(duty_left);
+    else
+        TB6612_A_Backward(duty_left);
+
+    /* ---- 右轮（B 通道，安装方向镜像） ---- */
+    float abs_right = (right_mm_s >= 0.0f) ? right_mm_s : -right_mm_s;
+    uint32_t duty_right = (uint32_t)(abs_right / MOTOR_MAX_SPEED_MM_S * MOTOR_MAX_PWM_DUTY);
+    if (duty_right > MOTOR_MAX_PWM_DUTY)
+        duty_right = MOTOR_MAX_PWM_DUTY;
+
+    if (duty_right < MOTOR_MIN_DUTY)
+        TB6612_B_Brake();
+    else if (right_mm_s >= 0.0f)
+        TB6612_B_Backward(duty_right);
+    else
+        TB6612_B_Forward(duty_right);
+}
+
 void Motor_Brake(void)
 {
     TB6612_A_Brake();

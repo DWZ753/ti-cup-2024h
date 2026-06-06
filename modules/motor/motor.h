@@ -69,6 +69,14 @@ void Motor_Init(void);
 void Motor_SetSpeed(float speed_mm_s);
 
 /**
+ * @brief 独立设置左右轮线速度（差速控制）
+ * @param left_mm_s  左轮线速度 mm/s，正值前进 / 负值后退
+ * @param right_mm_s 右轮线速度 mm/s，正值前进 / 负值后退
+ * @note  右轮安装方向与左轮镜像，内部自动处理方向反转
+ */
+void Motor_SetSpeedLR(float left_mm_s, float right_mm_s);
+
+/**
  * @brief 两路电机同时制动
  */
 void Motor_Brake(void);
