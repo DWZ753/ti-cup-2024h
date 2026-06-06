@@ -49,6 +49,8 @@ int main(void)
     /* ---- 丢线防抖计数器 ---- */
     uint8_t lost_debounce = 0;
 
+    char buf[128];
+
     while (1)
     {
         uint32_t now = Board_GetTickMs();
@@ -107,7 +109,7 @@ int main(void)
             Motor_Brake();
         }
 
-        /* ======== 角度 PID 定时计算（仅当启用） ======== */
+        /* ======== 角度 PID 定时计算 ======== */
         if (now - last_angle_pid >= ANGLE_PID_DT_MS)
         {
             last_angle_pid = now;
@@ -160,26 +162,32 @@ int main(void)
         if (StateMachine_IsFinished())
         {
             Motor_Brake();
-            // TODO: 声光提示（Buzzer_Beep + LED_Flash）
+            Buzzer_Beep(500);
         }
 
-        /* ======== UART 遥测（每 100ms） ======== */
+        /* ======== 显示（每 100ms） ======== */
         if (now - last_output >= 100)
         {
             last_output = now;
+
+            //oled显示当前状态
+            sprintf(buf, "State %d", StateMachine_GetState());
+            OLED_ShowString(32, 3, buf, 16);
+            sprintf(buf, "Lap %d", StateMachine_GetLapCount());
+            OLED_ShowString(32, 5, buf, 16);
 
             float roll, pitch, yaw;
             IMU_GetEuler(&roll, &pitch, &yaw);
 
             UART_Printf(Board_GetUART(),
-                "%d, %.1f, %.1f, %.1f, %ld, %d, %d\n",
+                "%d, %.1f, %.1f, %ld, %d, %d, %.1f, %.1f, %.1f\n",
                 seg,                                    // 当前段类型
-                yaw,                                    // 原始 yaw（°）
                 Angle_GetTarget(),                      // 目标航向（°）
                 Angle_GetPIDOutput(),                   // 角度 PID 输出
                 (int32_t)Angle_GetServoValue(),          // 实际舵机值
                 on_line,                                // 是否检测到黑线
-                lost_debounce);                         // 丢线防抖计数
+                lost_debounce,                         // 丢线防抖计数
+                roll, pitch, yaw);
         }
     }
 }
