@@ -37,10 +37,18 @@ void Angle_Enable(bool enable);
 bool Angle_IsEnabled(void);
 
 /**
- * @brief 设置目标航向角
- * @param heading_deg 目标偏航角（°），坐标系由 Mahony 滤波器定义
+ * @brief 设置目标航向角（绝对角度，用于调试）
+ * @param heading_deg 目标偏航角（°）
  */
 void Angle_SetTarget(float heading_deg);
+
+/**
+ * @brief 以当前 yaw 为基准偏转 delta 度后锁定（相对角度，上赛道使用）
+ * @param delta_deg 相对偏转量（°），正值左转、负值右转
+ * @note  调用时立即读取当前 yaw，设置 target = yaw + delta_deg
+ *        应在进入直线段时调用一次，不要在循环中反复调用
+ */
+void Angle_SetTargetRelative(float delta_deg);
 
 /**
  * @brief 执行一次角度 PID 计算并输出到舵机

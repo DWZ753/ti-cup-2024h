@@ -2,6 +2,9 @@
 
 static SPI_Handle *g_bmi088_spi;
 
+/* 陀螺仪零偏（原始 ADC 值），由 BMI088_CalibrateGyro() 写入 */
+static int16_t g_gyro_offset_raw[3] = {0, 0, 0};
+
 /**
  * @brief  拉低 CS 选中设备
  * @param  cs_sel 0=加速度计, 1=陀螺仪
@@ -113,6 +116,15 @@ static uint8_t bmi088_gyro_init(void)
     bmi088_write_reg(BMI088_REG_GYR_SOFTRESET, BMI088_SOFTRESET_VALUE, 1);
     delay_ms(30);
 
+    /* 量程 ±2000°/s（寄存器 0x0F = 0x00，复位后默认值，显式确认） */
+    bmi088_write_reg(BMI088_REG_GYR_RANGE, 0x00, 1);
+    delay_ms(1);
+
+    /* 低通滤波器带宽 116Hz（寄存器 0x10 = 0x02, ODR 2kHz）
+     * 适配 100Hz 采样率，防混叠同时保持足够响应速度 */
+    bmi088_write_reg(BMI088_REG_GYR_BANDWIDTH, 0x02, 1);
+    delay_ms(1);
+
     return 0;
 }
 
@@ -139,15 +151,44 @@ void BMI088_ReadAccel(float accel[3])
     accel[2] = (float)raw_z * BMI088_ACCEL_SENSITIVITY;
 }
 
+void BMI088_CalibrateGyro(uint16_t num_samples)
+{
+    int32_t sum_x = 0, sum_y = 0, sum_z = 0;
+    uint16_t valid = 0;
+
+    for (uint16_t i = 0; i < num_samples; i++)
+    {
+        uint8_t buf[8] = {0};
+        bmi088_read_bytes(BMI088_REG_GYR_CHIP_ID, buf, 8, 1);
+
+        if (buf[0] == 0x0F)
+        {
+            sum_x += (int16_t)((buf[3] << 8) | buf[2]);
+            sum_y += (int16_t)((buf[5] << 8) | buf[4]);
+            sum_z += (int16_t)((buf[7] << 8) | buf[6]);
+            valid++;
+        }
+
+        delay_ms(2);  /* 等待下一次陀螺仪数据更新 (ODR ≈ 2kHz) */
+    }
+
+    if (valid > 0)
+    {
+        g_gyro_offset_raw[0] = (int16_t)(sum_x / valid);
+        g_gyro_offset_raw[1] = (int16_t)(sum_y / valid);
+        g_gyro_offset_raw[2] = (int16_t)(sum_z / valid);
+    }
+}
+
 void BMI088_ReadGyro(float gyro[3])
 {
     uint8_t buf[8] = {0};
     bmi088_read_bytes(BMI088_REG_GYR_CHIP_ID, buf, 8, 1);
 
     if (buf[0] == 0x0F) {
-        int16_t raw_x = (int16_t)((buf[3] << 8) | buf[2]);
-        int16_t raw_y = (int16_t)((buf[5] << 8) | buf[4]);
-        int16_t raw_z = (int16_t)((buf[7] << 8) | buf[6]);
+        int16_t raw_x = (int16_t)((buf[3] << 8) | buf[2]) - g_gyro_offset_raw[0];
+        int16_t raw_y = (int16_t)((buf[5] << 8) | buf[4]) - g_gyro_offset_raw[1];
+        int16_t raw_z = (int16_t)((buf[7] << 8) | buf[6]) - g_gyro_offset_raw[2];
 
         gyro[0] = (float)raw_x * BMI088_GYRO_2000_SEN;
         gyro[1] = (float)raw_y * BMI088_GYRO_2000_SEN;

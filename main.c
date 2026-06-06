@@ -9,18 +9,21 @@
 #define ANGLE_PID_DT_MS       80
 
 /* ========== 丢线防抖 ========== */
-#define LINE_LOST_DEBOUNCE     5    // 连续 N 次丢线才算真丢线
+#define LINE_LOST_DEBOUNCE     5
 
-/* ========== 固定速度（开环，不需要速度环 PID） ========== */
-#define SPEED_ARC          1200.0f  // 弧线段慢速，防止冲出黑线
-#define SPEED_STRAIGHT     1800.0f  // 直线段快速，拉高平均速度
+/* ========== 固定速度（开环） ========== */
+#define SPEED_ARC          200.0f
+#define SPEED_STRAIGHT     450.0f
 
 /* ========== 循迹 PID 参数 ========== */
-#define TRACKING_KP          2.0f
-#define TRACKING_KI          0.0f
-#define TRACKING_KD          0.5f
-#define TRACKING_INT_LIMIT  50.0f
-#define TRACKING_OUT_LIMIT 100.0f   // 循迹舵机可满幅
+// position ∈ [-1, 1]，OUT_LIMIT=40 对应满偏 40%
+// KP=40 → 最边缘传感器单独压线时输出 ±40
+#define TRACKING_KP         100.0f
+#define TRACKING_KI          0.5f
+#define TRACKING_KD          0.0f   // 用 slew rate 替代 D 项
+#define TRACKING_INT_LIMIT  20.0f
+#define TRACKING_OUT_LIMIT  100.0f
+#define TRACKING_SLEW_MAX     4     // 每次调用最大变化量
 
 int main(void)
 {
@@ -28,34 +31,37 @@ int main(void)
     Board_Init();
     StateMachine_Init();
 
-    /* ---- 循迹 PID 初始化（弧线段使用） ---- */
+    /* ---- 循迹 PID（弧线段使用） ---- */
     PID_Controller tracking_pid;
     PID_Init(&tracking_pid,
              TRACKING_KP, TRACKING_KI, TRACKING_KD,
              TRACKING_INT_LIMIT, TRACKING_OUT_LIMIT);
-    PID_SetTarget(&tracking_pid, 0.0f);  // 目标：黑线居中
+    PID_SetTarget(&tracking_pid, 0.0f);
+    int32_t tracking_last_servo = 0;   // slew rate 历史
 
-    /* ---- 角度 PID 初始化（直线段使用） ---- */
+    /* ---- 角度 PID（直线段使用） ---- */
     Angle_Init();
 
     /* ---- 时序变量 ---- */
-    uint32_t last_imu       = 0;
-    uint32_t last_angle_pid = 0;
-    uint32_t last_output    = 0;
+    uint32_t last_imu        = 0;
+    uint32_t last_angle_pid  = 0;
+    uint32_t last_tracking   = 0;
+    uint32_t last_output     = 0;
 
     /* ---- 状态机变化跟踪 ---- */
     QuestionState_t last_state = STATE_IDLE;
+    SegmentType_t   last_seg  = SEG_STOP;   // 用于检测段切换
 
     /* ---- 丢线防抖计数器 ---- */
     uint8_t lost_debounce = 0;
 
-    char buf[128];
+    uint8_t buf[16];
 
     while (1)
     {
         uint32_t now = Board_GetTickMs();
 
-        /* ======== IMU 姿态更新（每 IMU_UPDATE_DT_MS） ======== */
+        /* ======== IMU 姿态更新 ======== */
         if (now - last_imu >= IMU_UPDATE_DT_MS)
         {
             last_imu = now;
@@ -81,26 +87,63 @@ int main(void)
         /* ======== 当前段类型 → 控制模式 ======== */
         SegmentType_t seg = StateMachine_GetCurrentSegment();
         uint8_t mask = Grayscale_ReadAll();
-        bool on_line = (mask != 0xFF);  // 任意传感器检测到黑线
+        bool on_line = (mask != 0xFF);
 
         if (seg == SEG_ARC)
         {
-            /* 循迹模式：灰度 → 循迹 PID → 舵机 */
+            /* 循迹模式 */
             Angle_Enable(false);
             Motor_SetSpeed(SPEED_ARC);
 
-            float position = Tracking_CalcPosition(mask);
-            if (position != 99.0f)  // 未丢线
+            /* 刚切入弧线段时复位 PID */
+            if (last_seg != SEG_ARC)
             {
-                float steering = PID_Compute(&tracking_pid, position);
-                Servo_SetValue((int32_t)steering);
+                PID_Reset(&tracking_pid);
+                PID_SetTarget(&tracking_pid, 0.0f);
+                tracking_last_servo = 0;
+            }
+
+            /* 定周期计算循迹 PID（10ms） */
+            if (now - last_tracking >= 10)
+            {
+                last_tracking = now;
+                float position = Tracking_CalcPosition(mask);
+                if (position != 99.0f)
+                {
+                    float steering = PID_Compute(&tracking_pid, -position);
+                    int32_t servo_out = (int32_t)steering;
+
+                    /* slew rate 限幅 */
+                    int32_t delta = servo_out - tracking_last_servo;
+                    if (delta > TRACKING_SLEW_MAX)
+                        servo_out = tracking_last_servo + TRACKING_SLEW_MAX;
+                    else if (delta < -TRACKING_SLEW_MAX)
+                        servo_out = tracking_last_servo - TRACKING_SLEW_MAX;
+
+                    tracking_last_servo = servo_out;
+                    Servo_SetValue(servo_out);
+                }
+                else
+                {
+                    /* 全白丢线：舵机缓慢回中，防止卡在上次纠偏角度 */
+                    if (tracking_last_servo > TRACKING_SLEW_MAX)
+                        tracking_last_servo -= TRACKING_SLEW_MAX;
+                    else if (tracking_last_servo < -TRACKING_SLEW_MAX)
+                        tracking_last_servo += TRACKING_SLEW_MAX;
+                    else
+                        tracking_last_servo = 0;
+                    Servo_SetValue(tracking_last_servo);
+                }
             }
         }
         else if (seg == SEG_STRAIGHT)
         {
-            /* 角度保持模式：IMU → 角度 PID → 舵机 */
-            Angle_Enable(true);
-            Angle_SetTarget(StateMachine_GetTargetHeading());
+            /* 角度保持模式：进入时以当前 yaw 为基准 + 相对偏转角 */
+            if (!Angle_IsEnabled())
+            {
+                Angle_Enable(true);
+                Angle_SetTargetRelative(StateMachine_GetDeltaDeg());
+            }
             Motor_SetSpeed(SPEED_STRAIGHT);
         }
         else  // SEG_STOP
@@ -121,7 +164,6 @@ int main(void)
         {
             if (!on_line)
             {
-                // 弧线段：黑线消失 → 丢线防抖
                 if (++lost_debounce >= LINE_LOST_DEBOUNCE)
                 {
                     lost_debounce = 0;
@@ -130,26 +172,20 @@ int main(void)
             }
             else
             {
-                lost_debounce = 0;  // 线还在，清零防抖
+                lost_debounce = 0;
             }
         }
         else if (seg == SEG_STRAIGHT)
         {
             if (on_line)
             {
-                // 直线段：检测到黑线 → 到达顶点
-                if (StateMachine_NeedLeaveFirst())
-                {
-                    // 弦线段：还在起点黑线上，忽略
-                }
-                else
+                if (!StateMachine_NeedLeaveFirst())
                 {
                     StateMachine_SegmentDone();
                 }
             }
             else
             {
-                // 已离开黑线，通知状态机（弦线段 debounce）
                 if (StateMachine_NeedLeaveFirst())
                 {
                     StateMachine_LeftLine();
@@ -162,32 +198,37 @@ int main(void)
         if (StateMachine_IsFinished())
         {
             Motor_Brake();
-            Buzzer_Beep(500);
         }
 
-        /* ======== 显示（每 100ms） ======== */
+        last_seg = seg;
+
+        /* ======== UART 遥测（每 100ms） ======== */
         if (now - last_output >= 100)
         {
             last_output = now;
 
-            //oled显示当前状态
-            sprintf(buf, "State %d", StateMachine_GetState());
-            OLED_ShowString(32, 3, buf, 16);
-            sprintf(buf, "Lap %d", StateMachine_GetLapCount());
-            OLED_ShowString(32, 5, buf, 16);
-
             float roll, pitch, yaw;
             IMU_GetEuler(&roll, &pitch, &yaw);
 
+            sprintf(buf, "yaw %.1f", yaw);
+            OLED_ShowString(0, 0, buf, 16);
+
+            float pos = Tracking_CalcPosition(mask);
+            float trk_out = tracking_pid.output;
+
             UART_Printf(Board_GetUART(),
-                "%d, %.1f, %.1f, %ld, %d, %d, %.1f, %.1f, %.1f\n",
-                seg,                                    // 当前段类型
-                Angle_GetTarget(),                      // 目标航向（°）
-                Angle_GetPIDOutput(),                   // 角度 PID 输出
-                (int32_t)Angle_GetServoValue(),          // 实际舵机值
-                on_line,                                // 是否检测到黑线
-                lost_debounce,                         // 丢线防抖计数
-                roll, pitch, yaw);
+                "%d, %.1f, %.1f, %.1f, %ld, %d, %d, %d, %.2f, %.1f, %ld\n",
+                seg,
+                yaw,
+                Angle_GetTarget(),
+                Angle_GetPIDOutput(),
+                (long)Angle_GetServoValue(),
+                on_line,
+                lost_debounce,
+                mask,
+                pos,
+                trk_out,
+                (long)tracking_last_servo);
         }
     }
 }

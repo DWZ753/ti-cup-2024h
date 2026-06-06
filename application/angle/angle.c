@@ -47,6 +47,19 @@ void Angle_SetTarget(float heading_deg)
 }
 
 /**
+ * @brief 以当前 yaw 为基准，偏转 delta° 后作为目标航向
+ *
+ * 用于相对角度模式：每次进入直线段时调用一次，锁定"当前朝向 + 偏转量"。
+ * yaw 的绝对漂移不影响相对偏转精度。
+ */
+void Angle_SetTargetRelative(float delta_deg)
+{
+    float roll, pitch, yaw;
+    IMU_GetEuler(&roll, &pitch, &yaw);
+    s_angle_pid.target = yaw + delta_deg;
+}
+
+/**
  * @brief 将角度误差归一化到 [-180°, 180°]
  */
 static float wrap_180(float error)
@@ -66,7 +79,7 @@ void Angle_Compute(void)
     IMU_GetEuler(&roll, &pitch, &yaw);
 
     /* ---- 2. 角度缠绕归一化 ---- */
-    float error = wrap_180(s_angle_pid.target - yaw);
+    float error = wrap_180(yaw - s_angle_pid.target);
 
     /* ---- 3. 死区检查 ---- */
     int32_t servo_out;

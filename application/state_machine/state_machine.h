@@ -25,7 +25,8 @@ typedef enum {
 
 typedef struct {
     SegmentType_t type;
-    float         heading_deg;   // SEG_STRAIGHT 时的目标航向（°）
+    float         delta_deg;     // SEG_STRAIGHT 时的相对偏转角（°）
+                                 // 0=直走, >0=左转, <0=右转
 } PathSegment_t;
 
 /* ========== 初始化 ========== */
@@ -49,9 +50,10 @@ void StateMachine_StartTask(QuestionState_t task);
 SegmentType_t StateMachine_GetCurrentSegment(void);
 
 /**
- * @brief 获取当前直线段的目标航向角（仅在 SEG_STRAIGHT 时有效）
+ * @brief 获取当前直线段的相对偏转角（仅在 SEG_STRAIGHT 时有效）
+ * @return 相对偏转角（°），0=直走，正值左转，负值右转
  */
-float StateMachine_GetTargetHeading(void);
+float StateMachine_GetDeltaDeg(void);
 
 /* ========== 段推进 ========== */
 

@@ -22,6 +22,8 @@
 
 //陀螺仪
 #define BMI088_REG_GYR_CHIP_ID      0x00
+#define BMI088_REG_GYR_RANGE        0x0F
+#define BMI088_REG_GYR_BANDWIDTH    0x10
 #define BMI088_REG_GYR_SOFTRESET    0x14
 
 //软复位命令
@@ -39,7 +41,7 @@
 // 加速度计: ±6g → m/s², (6*9.8)/32768 ≈ 0.001795
 #define BMI088_ACCEL_SENSITIVITY  0.001795f
 // 陀螺仪: ±2000°/s → rad/s, (2000*π/180)/32768 ≈ 0.001065
-#define BMI088_GYRO_2000_SEN      0.001065264436f
+#define BMI088_GYRO_2000_SEN      0.001065264436f * 9/7
 
 /* ========== 通用 API ========== */
 
@@ -83,5 +85,14 @@ uint8_t BMI088_ReadGyroID(void);
  */
 void BMI088_ReadRawBytes(uint8_t reg, uint8_t *buf,
                          uint8_t len, uint8_t cs_sel);
+
+/**
+ * @brief 陀螺仪零偏校准（需在静止状态下调用）
+ * @param num_samples 采样次数（建议 ≥200）
+ * @note  采集 num_samples 次陀螺仪原始数据取均值作为零偏，
+ *         后续 BMI088_ReadGyro() 会自动减去该零偏。
+ *         必须在 BMI088_Init() 之后、IMU_Update() 之前调用。
+ */
+void BMI088_CalibrateGyro(uint16_t num_samples);
 
 #endif
