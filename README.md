@@ -74,6 +74,44 @@ bsp/                  # 外设抽象层（SPI、I2C、UART、Delay）
 | State Machine | [application/state_machine/state_machine.md](application/state_machine/state_machine.md) | 按键触发任务状态切换 |
 | Tracking | [application/tracking/tracking.md](application/tracking/tracking.md) | 8 路灰度加权插值循迹算法 |
 
+## VSCode 配置
+
+用 VSCode 打开本项目可获得代码高亮和 IntelliSense 补全。由于 SDK 和编译器路径每人不同，需要手动配置：
+
+1. 在项目根目录创建 `.vscode/c_cpp_properties.json`，内容如下：
+
+```json
+{
+    "configurations": [
+        {
+            "name": "MSPM0G3507_Config",
+            "includePath": [
+                "你的SDK路径/mspm0_sdk_2_10_00_04/source",
+                "你的SDK路径/mspm0_sdk_2_10_00_04/source/third_party/CMSIS/Core/Include",
+                "你的CCS路径/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS/include",
+                "${workspaceFolder}",
+                "${workspaceFolder}/Debug",
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "__MSPM0G3507__"
+            ],
+            "compilerPath": "你的CCS路径/ccs/tools/compiler/ti-cgt-armllvm_4.0.4.LTS/bin/tiarmclang.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "windows-clang-arm"
+        }
+    ],
+    "version": 4
+}
+```
+
+2. 把"你的SDK路径"和"你的CCS路径"替换为实际安装路径。例如默认安装：
+   - SDK：`D:/ti/ccs2050/mspm0_sdk_2_10_00_04`
+   - CCS：`D:/ti/ccs2050/ccs`
+
+3. 如需排除 VSCode 配置文件，可在 `.gitignore` 中保留 `.vscode/` 规则
+
 ## 构建与烧录
 
 本项目使用 **CCS Theia**（TI Eclipse IDE），无 Makefile/CMake。
@@ -106,7 +144,5 @@ bsp/                  # 外设抽象层（SPI、I2C、UART、Delay）
 
 ## 已知问题
 
-- **左电机（Motor 1）测速异常**：编码器读数不稳定，PID 闭环暂不可用。详见 [Motor 模块文档](modules/motor/motor.md)
-- **主循环 `state` 变量未使用**：`main.c` 中 `state` 被 Key 回调写入，但主循环未读取。建议使用 [State Machine 模块](application/state_machine/state_machine.md) 替代
 - **Yaw 漂移**：Mahony 滤波器仅用加速度计修正 Roll/Pitch，Yaw 角随时间漂移（无磁力计）
 - **Cortex-M0+ 无硬件 FPU**：浮点运算为软件模拟，IMU_Update 含大量浮点运算，注意控制频率
