@@ -2,121 +2,184 @@
 
 ## 概述
 
-`main.c` 是整个项目的入口。
+`main.c` 是整个项目的入口和**比赛任务主控循环**。当前版本实现了完整的双模式行驶控制：
 
-当前版本主要做了两件事：**IMU 姿态解算** 和 **UART 遥测输出**，用于验证传感器和通信链路是否正常。
+- **弧线段（SEG_ARC）**：灰度传感器循迹 + PID 转向 + 差速驱动
+- **直线段（SEG_STRAIGHT）**：IMU 角度保持 + 阿克曼转向，无黑线标记行驶
+
+任务流程由 [State Machine](application/state_machine/state_machine.md) 管理，按键触发后自动按路径序列执行。
 
 ## 初始化顺序
 
-初始化分为三步，**前两步基本固定，第三步按需增减**：
-
 ```c
 int main(void) {
-    SYSCFG_DL_init();    // 1. 固定：SysConfig 生成的时钟和外设初始化
-    Board_Init();        // 2. 基本固定：所有模块初始化（如需增删模块，改 board.c）
-    StateMachine_Init(); // 3. 可选：状态机初始化。不需要状态机时删掉即可
+    SYSCFG_DL_init();       // 1. 固定：SysConfig 生成的时钟和外设初始化
+    Board_Init();           // 2. 基本固定：所有模块初始化
+    StateMachine_Init();    // 3. 状态机初始化（按键回调注册）
 
-    // ... 进入主循环（这里是你可以自由发挥的地方）
+    // 初始化循迹 PID（弧线段使用）
+    PID_Controller tracking_pid;
+    PID_Init(&tracking_pid, TRACKING_KP, TRACKING_KI, TRACKING_KD,
+             TRACKING_INT_LIMIT, TRACKING_OUT_LIMIT);
+    PID_SetTarget(&tracking_pid, 0.0f);
+
+    // 初始化角度 PID（直线段使用）
+    Angle_Init();
+
+    // 进入主循环
 }
 ```
 
-## 主循环调度（当前版本）
-
-当前使用基于 `Board_GetTickMs()` 的非阻塞轮询：
+## 控制周期
 
 | 任务 | 周期 | 说明 |
 |------|------|------|
-| `IMU_Update()` | 2ms | 姿态解算（如果你不需要 IMU，可以删掉或改周期） |
-| UART 遥测输出 | 10ms | 向上位机输出调试数据（格式自定义，按需改） |
+| `IMU_Update()` | 10ms | 姿态解算（Mahony 互补滤波） |
+| 循迹 PID 计算 | 10ms | 灰度→位置→PID→slew rate→舵机 |
+| 角度 PID 计算 | 80ms | yaw→缠绕→死区→PID→slew rate→舵机 |
+| UART 遥测 | 100ms | CSV 格式调试数据输出 |
 
-```c
-uint32_t last_imu    = 0;
-uint32_t last_output = 0;
+## 双模式控制架构
 
-while (1) {
-    uint32_t now = Board_GetTickMs();
-
-    if (now - last_imu >= 2) {
-        last_imu = now;
-        IMU_Update();
-    }
-
-    if (now - last_output >= 10) {
-        last_output = now;
-        // ... 串口输出（内容根据需求自定义）
-    }
-}
-```
-
-## 当前 UART 遥测格式
-
-每 10ms 输出一行 CSV：
+### 弧线段：循迹 + 差速
 
 ```
-q0,q1,q2,q3,roll,pitch,yaw,ax,ay,az
+灰度传感器(mask) → Tracking_CalcPosition() → PID_Compute(-position)
+    → slew rate 限幅 → Servo_SetValue()
+    → 差速：left = SPEED_ARC + diff, right = SPEED_ARC - diff
+```
+
+- 舵机偏转角越大 → 两轮速度差越大（`ARC_DIFF_GAIN = 7.3`）
+- 丢线时舵机**缓慢回中**（而非保持上次角度），防止跑飞
+- PID 输入取 `-position`：position 正值（偏右）→ PID 输出负值 → 舵机左转修正
+
+### 直线段：角度保持 + 阿克曼
+
+```
+进入时：Angle_SetTargetRelative(delta_deg) → 锁定 yaw + delta_deg
+每 80ms：Angle_Compute() → 读 yaw → wrap_180(error) → 死区 → PID → slew rate → 舵机
+```
+
+- 进入直线段时立即以**当前 yaw + 路径指定的相对偏转角**为目标
+- yaw 的绝对漂移不影响相对偏转精度
+- 死区内（±2°）舵机归零，清零积分
+- 直线段固定速度 `SPEED_STRAIGHT = 450 mm/s`（无差速）
+
+## 段切换与终点检测
+
+### 弧线段 → 下一段
+灰度传感器**连续 5 次全白（丢线）** → `StateMachine_SegmentDone()` 推进
+
+### 直线段 → 下一段
+- 步骤 1：先等待**离开起点黑线**（`StateMachine_NeedLeaveFirst()` → 传感器全白 → `StateMachine_LeftLine()`）
+- 步骤 2：灰度传感器**重新压线** → `StateMachine_SegmentDone()` 推进
+
+### 终点停车
+`StateMachine_IsFinished()` 返回 `true` → `Motor_Brake()` 刹车
+
+## 可调参数
+
+### 循迹 PID（弧线段）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `TRACKING_KP` | 100.0 | position∈[-1,1]，KP=100 时边缘压线输出约 ±100 |
+| `TRACKING_KI` | 0.5 | 消除稳态偏差 |
+| `TRACKING_KD` | 0.0 | 用 slew rate 替代 D 项 |
+| `TRACKING_INT_LIMIT` | 20.0 | 积分上限 |
+| `TRACKING_OUT_LIMIT` | 100.0 | 输出上限（舵量满偏） |
+| `TRACKING_SLEW_MAX` | 4 | 每次调用舵机最大变化量 |
+
+### 速度与差速
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `SPEED_ARC` | 1000.0 | 弧线段固定速度（mm/s） |
+| `SPEED_STRAIGHT` | 450.0 | 直线段固定速度（mm/s） |
+| `ARC_DIFF_GAIN` | 7.3 | 差速增益：servo × gain = 两轮速度差 |
+
+### 丢线防抖
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `LINE_LOST_DEBOUNCE` | 5 | 连续丢线次数阈值（×10ms = 50ms） |
+
+### 角度 PID（直线段）
+
+见 [Angle 角度保持模块](application/angle/angle.md)。
+
+## UART 遥测格式
+
+每 100ms 输出一行 CSV：
+
+```
+seg, yaw, angle_target, angle_pid_out, angle_servo, on_line, lost_debounce, mask, track_pos, track_pid_out, track_servo
 ```
 
 | 列 | 说明 | 单位 |
 |----|------|------|
-| q0~q3 | 四元数 | 无量纲 |
-| roll / pitch / yaw | 欧拉角 | 度 (°) |
-| ax / ay / az | 加速度 | m/s² |
+| seg | 当前段类型（0=ARC, 1=STRAIGHT, 2=STOP） | 枚举 |
+| yaw | 当前偏航角 | ° |
+| angle_target | 角度 PID 目标值 | ° |
+| angle_pid_out | 角度 PID 输出 | — |
+| angle_servo | 角度环舵机值 | — |
+| on_line | 是否压线（1=压线, 0=丢线） | bool |
+| lost_debounce | 丢线防抖计数 | — |
+| mask | 灰度传感器原始读数（8bit） | hex |
+| track_pos | 循迹位置（-1~+1, 99=丢线） | — |
+| track_pid_out | 循迹 PID 输出 | — |
+| track_servo | 循迹环舵机值 | — |
 
-## 常用模式参考
-
-以下是一些常见的主循环组织方式。
-
-### 模式一：添加新任务
-
-在 `while(1)` 中按同样模式添加：
+## 主循环调度伪代码
 
 ```c
-uint32_t last_my_task = 0;
 while (1) {
-    uint32_t now = Board_GetTickMs();
+    now = Board_GetTickMs();
 
-    // ... 其他任务 ...
+    // ---- 10ms: IMU 更新 ----
+    if (now - last_imu >= 10) { IMU_Update(); }
 
-    if (now - last_my_task >= N) {   // N 是你需要的周期（ms）
-        last_my_task = now;
-        MyTask_Execute();
+    // ---- 按键检测 & 任务启动 ----
+    if (state changed) { StateMachine_StartTask(st); }
+
+    // ---- 当前段控制 ----
+    if (seg == SEG_ARC) {
+        // 循迹模式：PID + slew rate + 差速
+        if (now - last_tracking >= 10) {
+            position = Tracking_CalcPosition(mask);
+            steering = PID_Compute(&tracking_pid, -position);
+            steering = slew_limit(steering);
+            Servo_SetValue(steering);
+            Motor_SetSpeedLR(SPEED_ARC + diff, SPEED_ARC - diff);
+        }
+    } else if (seg == SEG_STRAIGHT) {
+        // 角度保持模式
+        if (!angle_enabled) { Angle_SetTargetRelative(delta_deg); }
+        Motor_SetSpeed(SPEED_STRAIGHT);
+    } else {
+        Motor_Brake();
     }
-}
-```
 
-### 模式二：配合状态机切换行为
+    // ---- 80ms: 角度 PID ----
+    if (now - last_angle_pid >= 80) { Angle_Compute(); }
 
-通过 [State Machine](application/state_machine/state_machine.md) 在不同赛题模式间切换：
+    // ---- 段切换检测 ----
+    if (seg == SEG_ARC && 连续丢线) { StateMachine_SegmentDone(); }
+    if (seg == SEG_STRAIGHT && 重新压线) { StateMachine_SegmentDone(); }
 
-```c
-while (1) {
-    switch (StateMachine_GetState()) {
-        case STATE_IDLE:
-            // 空闲等待
-            break;
-        case STATE_TASK1:
-            // 循迹模式：读灰度 → 算位置 → 控舵机+电机
-            break;
-        case STATE_TASK2:
-            // 其他模式...
-            break;
-    }
-}
-```
+    // ---- 终点停车 ----
+    if (StateMachine_IsFinished()) { Motor_Brake(); }
 
-### 模式三：按固定顺序执行（无定时）
-
-对于简单任务，甚至不需要定时调度：
-
-```c
-while (1) {
-    sensor_read();
-    control_calc();
-    motor_output();
-    delay_ms(20);
+    // ---- 100ms: 遥测 ----
+    // 输出 CSV 格式调试数据
 }
 ```
 
 ## 注意事项
 
-- 主循环使用**忙等轮询**（busy-wait polling），无 RTOS。各模块需要严格周期性的任务通过 PIT 中断回调完成。
+- 主循环使用**忙等轮询**（busy-wait polling），无 RTOS
+- 角度 PID 调用周期（80ms）远慢于 IMU 更新（10ms），这是刻意设计：阿克曼转向是积分型被控对象，高频控制反而容易震荡
+- 循迹 PID 的 `position` 取反后输入（`-position`），因为 position 正值（偏右）需要负舵机值（左转修正）
+- 丢线时舵机缓慢回中到 0，而非保持上次值，防止卡在极限角度跑飞
+- `uint32_t` 滴答计数连续运行约 49.7 天会回绕，但 `now - last >= N` 的无符号比较对回绕是安全的
+- 上赛道后需要根据实际抓地力调整 `SPEED_ARC`、`SPEED_STRAIGHT` 和 `ARC_DIFF_GAIN`

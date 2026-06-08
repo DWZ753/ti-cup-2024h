@@ -14,16 +14,16 @@ static const PathSegment_t path_task1[] = {
 // TASK2: A → C(上半圆弧) → D(右边直线) → B(下半圆弧) → A(左边直线)
 static const PathSegment_t path_task2[] = {
     { SEG_ARC,        0.0f },   // AC 上半圆弧
-    { SEG_STRAIGHT, -30.0f },   // CD: 出弧后右转走直（偏转值实测）
+    { SEG_STRAIGHT, -24.0f },   // CD: 出弧后右转走直（偏转值实测）
     { SEG_ARC,        0.0f },   // DB 下半圆弧
-    { SEG_STRAIGHT, -30.0f },   // BA: 出弧后右转走直（偏转值实测）
+    { SEG_STRAIGHT, -26.0f },   // BA: 出弧后右转走直（偏转值实测）
 };
 
 // TASK3: A → C(弦直线) → B(弧) → D(弦直线) → A(弧)
 static const PathSegment_t path_task3[] = {
-    { SEG_STRAIGHT,   0.0f },   // AC 弦: 保持当前朝向直走
+    { SEG_STRAIGHT,   -30.0f },   // AC 弦: 保持当前朝向直走
     { SEG_ARC,        0.0f },   // 弧线段
-    { SEG_STRAIGHT,   0.0f },   // 弦直线: 偏转值实测
+    { SEG_STRAIGHT,   -30.0f },   // 弦直线: 偏转值实测
     { SEG_ARC,        0.0f },   // 弧线段
 };
 

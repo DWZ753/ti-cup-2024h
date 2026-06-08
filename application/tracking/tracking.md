@@ -2,7 +2,7 @@
 
 ## 概述
 
-基于 8 路灰度传感器数据的黑线位置解算算法。使用**加权插值法**将传感器的离散电平值转换为连续的归一化位置值，供转向控制使用。
+基于 8 路灰度传感器数据的黑线位置解算算法。使用**加权平均法**将传感器的离散电平值转换为连续的归一化位置值，供转向 PID 控制使用。
 
 ## 文件
 
@@ -39,7 +39,7 @@
 ## 宏定义
 
 ```c
-#define SENSOR_COUNT    8                 // 传感器数量
+#define SENSOR_COUNT    8                        // 传感器数量
 #define SENSOR_CENTER   ((SENSOR_COUNT - 1) / 2.0f)  // 中心索引 = 3.5
 ```
 
@@ -63,43 +63,74 @@
 
 - [Grayscale 灰度传感器模块](../../modules/grayscale/grayscale.md)（提供 `mask` 输入）
 
-## 使用示例
+## 实际使用（main.c 中的集成方式）
+
+### 配合 PID + Slew Rate 转向控制
 
 ```c
-#include "grayscale.h"
-#include "tracking.h"
+// 初始化循迹 PID
+PID_Controller tracking_pid;
+PID_Init(&tracking_pid, 100.0, 0.5, 0.0, 20.0, 100.0);
+PID_SetTarget(&tracking_pid, 0.0f);     // 目标：黑线居中 → position = 0
+int32_t last_servo = 0;
 
-// 读取传感器 → 计算位置 → 控制舵机
+// 每 10ms 调用
 uint8_t mask = Grayscale_ReadAll();
 float position = Tracking_CalcPosition(mask);
 
-if (position == 99.0f) {
-    // 丢线处理：保持上一次方向或停车
+if (position != 99.0f) {
+    // 注意：取 -position，因为 position 正值（偏右）需要负舵机值（左转修正）
+    float steering = PID_Compute(&tracking_pid, -position);
+    int32_t servo_out = (int32_t)steering;
+
+    // Slew rate 限幅：每次最多变化 TRACKING_SLEW_MAX
+    int32_t delta = servo_out - last_servo;
+    if (delta > 4)       servo_out = last_servo + 4;
+    else if (delta < -4) servo_out = last_servo - 4;
+
+    last_servo = servo_out;
+    Servo_SetValue(servo_out);
 } else {
-    // 位置映射到舵机角度
-    // position = -1.0（偏左）→ 舵机左转修正
-    // position = +1.0（偏右）→ 舵机右转修正
-    int32_t servo_value = (int32_t)(position * 100.0f);
-    Servo_SetValue(servo_value);
+    // 丢线：舵机缓慢回中，防止卡在上次极限角度跑飞
+    if (last_servo > 4)       last_servo -= 4;
+    else if (last_servo < -4) last_servo += 4;
+    else                      last_servo = 0;
+    Servo_SetValue(last_servo);
 }
 ```
 
-### 配合 PID 转向控制
+### 配合差速驱动
 
 ```c
-// 将位置偏差作为 PID 输入
-PID_Controller steering_pid;
-PID_Init(&steering_pid, 2.0, 0.0, 0.5, 100.0, 100.0);
-PID_SetTarget(&steering_pid, 0.0f);  // 目标：黑线居中
+// 舵机偏转角越大 → 两轮速度差越大
+float diff = servo_out * ARC_DIFF_GAIN;
+float left_speed  = SPEED_ARC + diff;
+float right_speed = SPEED_ARC - diff;
+Motor_SetSpeedLR(left_speed, right_speed);
+```
 
-float position = Tracking_CalcPosition(Grayscale_ReadAll());
-float steering_output = PID_Compute(&steering_pid, position);
-Servo_SetValue((int32_t)steering_output);
+### 丢线防抖（段切换检测）
+
+```c
+// 弧线段连续丢线 N 次 → 推进到下一段
+#define LINE_LOST_DEBOUNCE 5
+uint8_t lost_debounce = 0;
+
+if (!on_line) {
+    if (++lost_debounce >= LINE_LOST_DEBOUNCE) {
+        lost_debounce = 0;
+        StateMachine_SegmentDone();
+    }
+} else {
+    lost_debounce = 0;
+}
 ```
 
 ## 注意事项
 
 - `mask` 中 bit 顺序与传感器物理排列顺序必须一致（bit[0] = 最左侧传感器）
-- 丢线时返回 99.0，调用者需自行处理（保持上一帧位置 / 停车 / 倒车找回）
-- 加权平均法对噪声较敏感，必要时在位置输出端加低通滤波
+- 丢线时返回 **99.0**，调用者需自行处理。建议舵机缓慢回中而非保持上一帧位置，防止跑飞
+- 加权平均法对噪声较敏感，必要时可在位置输出端加低通滤波。当前版本通过 PID 积分项和 slew rate 限幅间接抑制噪声
 - 如果只有 1 个传感器检测到黑线，位置即为该传感器的归一化索引
+- PID 输入取 `-position`（符号反转），因为 position 的方向与舵机修正方向相反
+- 当前循迹 PID 参数较大（`KP=100`），因为 position 范围仅 [-1,1]，需要足够的输出驱动舵机

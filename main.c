@@ -13,7 +13,7 @@
 
 /* ========== 固定速度（开环） ========== */
 #define SPEED_ARC          1000.0f
-#define SPEED_STRAIGHT     450.0f
+#define SPEED_STRAIGHT     1000.0f
 #define ARC_DIFF_GAIN        7.3f   // 差速增益：servo × gain = 两轮速度差 (mm/s)
 
 /* ========== 循迹 PID 参数 ========== */
@@ -152,7 +152,14 @@ int main(void)
                 Angle_Enable(true);
                 Angle_SetTargetRelative(StateMachine_GetDeltaDeg());
             }
-            Motor_SetSpeed(SPEED_STRAIGHT);
+            /* 差速辅助转向：舵偏越大两轮速差越大，加速回正 */
+            {
+                int32_t servo = Angle_GetServoValue();
+                float diff = servo * ARC_DIFF_GAIN;
+                float left_speed  = SPEED_STRAIGHT + diff;
+                float right_speed = SPEED_STRAIGHT - diff;
+                Motor_SetSpeedLR(left_speed, right_speed);
+            }
         }
         else  // SEG_STOP
         {
@@ -219,7 +226,9 @@ int main(void)
             IMU_GetEuler(&roll, &pitch, &yaw);
 
             sprintf(buf, "yaw %.1f", yaw);
-            OLED_ShowString(0, 0, buf, 16);
+            OLED_ShowString(32, 0, buf, 16);
+            sprintf(buf, "yaw_t %.1f", Angle_GetTarget());
+            OLED_ShowString(32, 2, buf, 16);
 
             float pos = Tracking_CalcPosition(mask);
             float trk_out = tracking_pid.output;

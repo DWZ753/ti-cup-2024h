@@ -2,7 +2,9 @@
 
 ## 概述
 
-标准**位置式 PID**（Proportional-Integral-Derivative）控制器，提供积分限幅和输出限幅功能。适用于速度环、角度环、转向控制等各种闭环控制场景。
+标准**位置式 PID**（Proportional-Integral-Derivative）控制器，提供积分限幅和输出限幅功能。项目中同时用于两个场景：
+- **[循迹转向控制](../tracking/tracking.md)**：灰度传感器位置 → PID → 舵机（`KP=100, KI=0.5`）
+- **[角度保持控制](../angle/angle.md)**：IMU yaw → PID → 舵机（`KP=2.0, KI=0.02`）
 
 ## 文件
 
@@ -36,7 +38,7 @@ d_out = Kd × (error - 2.0 × last_error + prev_error)
 | 限幅类型 | 说明 |
 |----------|------|
 | 积分限幅 (`integral_limit`) | 防止积分项无限累加（积分饱和），导致系统超调失控 |
-| 输出限幅 (`output_limit`) | 确保控制输出不超过执行器物理极限（如 PWM 满量程） |
+| 输出限幅 (`output_limit`) | 确保控制输出不超过执行器物理极限（如舵机 PWM 满量程） |
 
 ## 类型定义
 
@@ -71,7 +73,7 @@ typedef struct {
 | `ki` | 积分系数 |
 | `kd` | 微分系数 |
 | `integral_limit` | 积分限幅（建议取输出限幅的 50%~80%） |
-| `output_limit` | 输出限幅（对应执行器最大值，如 PWM 满量程） |
+| `output_limit` | 输出限幅（对应执行器最大值） |
 
 ### `float PID_Compute(PID_Controller *pid, float current_value)`
 
@@ -84,64 +86,53 @@ typedef struct {
 
 | 返回值 | 说明 |
 |--------|------|
-| `float` | 控制输出量（已限幅） |
+| `float` | 控制输出量（已限幅），同时存入 `pid->output` |
 
-**调用频率：** 应在固定的控制周期内调用，如 20ms（PIT Control Tick）。
+**调用频率：** 应在固定的控制周期内调用。循迹 PID 每 10ms，角度 PID 每 80ms。
 
 ### `void PID_SetTarget(PID_Controller *pid, float target)`
 
 设置新的目标值。
 
-| 参数 | 说明 |
-|------|------|
-| `target` | 目标值 |
-
 ### `void PID_Reset(PID_Controller *pid)`
 
 清零积分项和误差历史。**模式切换时必须调用**，避免旧状态的积分值影响新模式。
 
-## 使用示例
+## 项目中的实际使用
 
-### 电机速度环 PID
+### 场景一：循迹转向 PID（[main.c](../../main.md) 中定义）
 
 ```c
-#include “pid.h”
-#include “motor.h”
+PID_Controller tracking_pid;
+PID_Init(&tracking_pid, 100.0, 0.5, 0.0, 20.0, 100.0);
+PID_SetTarget(&tracking_pid, 0.0f);          // 目标：黑线居中
 
-// 定义控制器
-PID_Controller speed_pid;
-
-// 初始化
-PID_Init(&speed_pid,
-    0.5,      // Kp: 从 0.5 开始调
-    0.1,      // Ki: 从 0.1 开始调
-    0.01,     // Kd: 从 0.01 开始调
-    500.0,    // 积分限幅
-    1000.0);  // 输出限幅（对应 PWM 满幅）
-PID_SetTarget(&speed_pid, 500.0);  // 目标速度 500mm/s
-
-// 在 PIT Control Tick 回调中计算
-void Motor_PID_TickHandler(void) {
-    float current_speed = Motor_GetEncoder1Speed();
-    float output = PID_Compute(&speed_pid, current_speed);
-    Motor_SetSpeed(output);
+// 每 10ms
+float position = Tracking_CalcPosition(mask);
+if (position != 99.0f) {
+    float steering = PID_Compute(&tracking_pid, -position);  // 注意取反
+    // ... slew rate 限幅 → Servo_SetValue()
 }
 ```
 
-### 转向循迹 PID
+**为什么 `-position`？** position 正值表示黑线偏右，需要舵机左转（负值）修正。取反后 PID 输出符号与舵机方向一致。
+
+### 场景二：角度保持 PID（[Angle 模块](../angle/angle.c) 内部维护）
 
 ```c
-PID_Controller steering_pid;
-PID_Init(&steering_pid, 2.0, 0.0, 0.5, 100.0, 100.0);
-PID_SetTarget(&steering_pid, 0.0f);  // 目标：黑线居中
+// Angle_Init()
+PID_Init(&s_angle_pid, 2.0, 0.02, 0.0, 25.0, 50.0);
 
-void Tracking_TickHandler(void) {
-    uint8_t mask = Grayscale_ReadAll();
-    float position = Tracking_CalcPosition(mask);
-    float steering = PID_Compute(&steering_pid, position);
-    Servo_SetValue((int32_t)steering);
+// Angle_Compute() 每 80ms
+float error = wrap_180(yaw - target);
+if (|error| > 2°) {
+    float current_value = target - error;
+    float output = PID_Compute(&s_angle_pid, current_value);
+    // ... slew rate 限幅 → Servo_SetValue()
 }
 ```
+
+角度 PID 的 `current_value` 不是原始 yaw，而是 `target - error`（经过缠绕修正的等价当前值），确保 PID 内部误差计算的一致性。
 
 ## PID 调参指南
 
@@ -153,11 +144,11 @@ void Tracking_TickHandler(void) {
 ### 实操步骤
 
 1. **纯 P 调试**：Ki=0, Kd=0，从 0.1 开始逐步增大 Kp
-   - 电机出现高频振动 → 回退到振动前值的 70%
+   - 出现高频振动 → 回退到振动前值的 70%
 2. **加入 I**：从 0.01 开始逐步增大 Ki
    - 加快消除稳态误差，注意不要过冲
-3. **加入 D**：速度环通常不需要 D，转向环可加少量（如 0.001~0.01）
-   - 抑制振荡，相当于”超前刹车”
+3. **加入 D**：转向环可加少量（如 0.001~0.01），速度环通常不需要
+   - 抑制振荡，相当于"超前刹车"
 
 ### 常见问题
 
@@ -168,6 +159,12 @@ void Tracking_TickHandler(void) {
 | 有稳态误差 | 增大 Ki |
 | 过冲严重 | 减小 Ki / 增大 Kd |
 | 积分饱和 | 减小 integral_limit |
+
+### 本项目特有策略
+
+- **用 slew rate 替代 D 项**：微分项对传感器噪声敏感，slew rate 限幅同样能抑制突变且更稳定
+- **角度环控制频率放慢**：80ms 而非 10ms，阿克曼转向是积分型被控对象（舵角→角速度→航向），高频控制反而容易震荡
+- **模式切换时必调 `PID_Reset()`**：清零积分和历史误差，防止旧状态残留
 
 ## 依赖
 

@@ -2,8 +2,9 @@
 #define STATE_MACHINE_H
 
 #include "ti_msp_dl_config.h"
-#include "key.h"
 #include <stdint.h>
+
+#include "key.h"
 
 /* ========== 题目状态 ========== */
 

@@ -23,8 +23,8 @@ void Angle_Enable(bool enable)
 {
     if (enable && !s_enabled)
     {
-        // 从关闭切换到启用：复位 PID 状态，以当前航向为初始目标
-        Angle_Reset();
+        // 从关闭切换到启用：只清 PID 积分/误差，舵机保持当前值平滑过渡
+        PID_Reset(&s_angle_pid);
     }
     else if (!enable && s_enabled)
     {
@@ -46,6 +46,8 @@ void Angle_SetTarget(float heading_deg)
     s_angle_pid.target = heading_deg;
 }
 
+static float wrap_180(float error);
+
 /**
  * @brief 以当前 yaw 为基准，偏转 delta° 后作为目标航向
  *
@@ -56,7 +58,7 @@ void Angle_SetTargetRelative(float delta_deg)
 {
     float roll, pitch, yaw;
     IMU_GetEuler(&roll, &pitch, &yaw);
-    s_angle_pid.target = yaw + delta_deg;
+    s_angle_pid.target = wrap_180(yaw + delta_deg);
 }
 
 /**

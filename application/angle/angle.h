@@ -10,8 +10,8 @@
 #define ANGLE_KP             2.0f    // 比例系数：每度偏差 → 舵机输出量
 #define ANGLE_KI             0.02f   // 积分系数：消除长期稳态偏差
 #define ANGLE_KD             0.0f    // 微分系数：先不加，阿克曼转向天然有阻尼
-#define ANGLE_INTEGRAL_LIMIT 25.0f   // 积分上限，防止饱和
-#define ANGLE_OUTPUT_LIMIT   50.0f   // 输出上限（舵量），不打满方向盘
+#define ANGLE_INTEGRAL_LIMIT 50.0f   // 积分上限，防止饱和
+#define ANGLE_OUTPUT_LIMIT   100.0f   // 输出上限（舵量），不打满方向盘
 
 // 滤波器与限幅
 #define ANGLE_DEADBAND_DEG   2.0f    // 死区 ±2°，偏差在此范围内不修正
